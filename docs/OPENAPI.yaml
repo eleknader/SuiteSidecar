@@ -1,0 +1,763 @@
+openapi: 3.0.3
+info:
+  title: SuiteSidecar Connector API
+  version: 0.1.0
+  description: >
+    Connector API consumed by the SuiteSidecar Outlook add-in.
+    This API mediates access to SuiteCRM and provides a stable, normalized contract.
+servers:
+  - url: https://connector.example.com
+    description: Production
+  - url: https://localhost:8443
+    description: Local development (HTTPS required for Office add-ins)
+
+tags:
+  - name: System
+  - name: Auth
+  - name: Profiles
+  - name: Lookup
+  - name: Entities
+  - name: Email
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Basic liveness/readiness signal for monitoring.
+      security: [] # public
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /version:
+    get:
+      tags: [System]
+      summary: Version info
+      security: [] # public
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login to a SuiteCRM profile and obtain a connector session token
+      description: >
+        Authenticates the user against the selected SuiteCRM instance/profile and returns a
+        connector-issued bearer token. The connector stores SuiteCRM tokens server-side.
+      security: [] # public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout and invalidate the current session token
+      responses:
+        "204":
+          description: Logged out
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /profiles:
+    get:
+      tags: [Profiles]
+      summary: List available SuiteCRM profiles
+      description: >
+        Returns configured profiles (instances). Profiles are connector-side configuration and
+        can be restricted by deployment policy.
+      security: [] # public (so login UI can list profiles)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileListResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /lookup/by-email:
+    get:
+      tags: [Lookup]
+      summary: Lookup CRM person context by email address
+      description: >
+        Finds a matching Contact first, then Lead (fallback). Returns a normalized context object.
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+        - name: include
+          in: query
+          required: false
+          description: Comma-separated includes (e.g. "account,opportunities,cases,timeline")
+          schema:
+            type: string
+            example: "account,timeline"
+      responses:
+        "200":
+          description: Found (may still indicate "notFound=false/true" inside body)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /entities/contacts:
+    post:
+      tags: [Entities]
+      summary: Create a Contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContactRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityCreateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /entities/leads:
+    post:
+      tags: [Entities]
+      summary: Create a Lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeadRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityCreateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /email/log:
+    post:
+      tags: [Email]
+      summary: Log an email interaction to SuiteCRM
+      description: >
+        Logs an email message (metadata + optional body) and links it to an existing entity.
+        Attachments are optional and may be supported in later versions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailLogRequest"
+      responses:
+        "201":
+          description: Logged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailLogResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: Conflict (e.g. duplicate)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    PayloadTooLarge:
+      description: Payload too large
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    TooManyRequests:
+      description: Rate limited
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    ServerError:
+      description: Server error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    # ---------- System ----------
+    HealthResponse:
+      type: object
+      required: [status, time]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        time:
+          type: string
+          format: date-time
+
+    VersionResponse:
+      type: object
+      required: [name, version]
+      properties:
+        name:
+          type: string
+          example: "suitesidecar-connector-php"
+        version:
+          type: string
+          example: "0.1.0"
+        gitSha:
+          type: string
+          nullable: true
+          example: "a1b2c3d4"
+        buildTime:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ---------- Auth ----------
+    LoginRequest:
+      type: object
+      required: [profileId, username, password]
+      properties:
+        profileId:
+          type: string
+          description: Connector profile id for the target SuiteCRM instance.
+          example: "prod-eu-1"
+        username:
+          type: string
+          example: "john.doe"
+        password:
+          type: string
+          format: password
+        otp:
+          type: string
+          nullable: true
+          description: Optional future field for MFA/OTP if supported.
+        clientInfo:
+          $ref: "#/components/schemas/ClientInfo"
+
+    LoginResponse:
+      type: object
+      required: [token, tokenExpiresAt, user]
+      properties:
+        token:
+          type: string
+          description: Connector bearer token (JWT).
+        tokenExpiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/ConnectorUser"
+
+    ConnectorUser:
+      type: object
+      required: [id, displayName]
+      properties:
+        id:
+          type: string
+          description: Connector user/session subject id.
+        displayName:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+
+    ClientInfo:
+      type: object
+      description: Optional client metadata for troubleshooting/telemetry.
+      properties:
+        outlookHost:
+          type: string
+          example: "OutlookWeb"
+        outlookPlatform:
+          type: string
+          example: "Web"
+        addinVersion:
+          type: string
+          example: "0.1.0"
+
+    # ---------- Profiles ----------
+    ProfileListResponse:
+      type: object
+      required: [profiles]
+      properties:
+        profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Profile"
+
+    Profile:
+      type: object
+      required: [id, name, suitecrmBaseUrl]
+      properties:
+        id:
+          type: string
+          example: "prod-eu-1"
+        name:
+          type: string
+          example: "Company CRM (PROD)"
+        suitecrmBaseUrl:
+          type: string
+          example: "https://crm.example.com"
+        apiFlavor:
+          type: string
+          description: Target API family.
+          enum: [suitecrm_v8_jsonapi, suitecrm_legacy_v4_1]
+          example: "suitecrm_v8_jsonapi"
+        notes:
+          type: string
+          nullable: true
+
+    # ---------- Lookup ----------
+    LookupResponse:
+      type: object
+      required: [notFound]
+      properties:
+        notFound:
+          type: boolean
+        match:
+          $ref: "#/components/schemas/PersonContext"
+        suggestions:
+          type: array
+          description: Optional suggestions when multiple matches exist.
+          items:
+            $ref: "#/components/schemas/PersonMatchCandidate"
+
+    PersonMatchCandidate:
+      type: object
+      required: [module, id, displayName]
+      properties:
+        module:
+          type: string
+          enum: [Contacts, Leads]
+        id:
+          type: string
+        displayName:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+
+    PersonContext:
+      type: object
+      required: [person]
+      properties:
+        person:
+          $ref: "#/components/schemas/PersonSummary"
+        account:
+          $ref: "#/components/schemas/AccountSummary"
+        related:
+          $ref: "#/components/schemas/RelatedSummary"
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineItem"
+
+    PersonSummary:
+      type: object
+      required: [module, id, displayName]
+      properties:
+        module:
+          type: string
+          enum: [Contacts, Leads]
+        id:
+          type: string
+        displayName:
+          type: string
+          example: "Matti Meikäläinen"
+        firstName:
+          type: string
+          nullable: true
+        lastName:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        link:
+          type: string
+          description: Deep link to SuiteCRM UI (if available/known).
+          nullable: true
+
+    AccountSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        website:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+
+    RelatedSummary:
+      type: object
+      properties:
+        opportunities:
+          type: array
+          items: { $ref: "#/components/schemas/RelatedItem" }
+        cases:
+          type: array
+          items: { $ref: "#/components/schemas/RelatedItem" }
+
+    RelatedItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+
+    TimelineItem:
+      type: object
+      required: [type, occurredAt, title]
+      properties:
+        type:
+          type: string
+          example: "Note"
+        occurredAt:
+          type: string
+          format: date-time
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+
+    # ---------- Entities ----------
+    CreateContactRequest:
+      type: object
+      required: [firstName, lastName, email]
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        title:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        accountName:
+          type: string
+          nullable: true
+          description: If provided, connector may create/link an Account (policy-dependent).
+        source:
+          type: string
+          nullable: true
+          description: Optional lead source / provenance marker.
+        customFields:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Optional custom field map (use with caution; may be restricted by policy).
+
+    CreateLeadRequest:
+      type: object
+      required: [firstName, lastName, email]
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        title:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        company:
+          type: string
+          nullable: true
+          description: Company name for the lead.
+        source:
+          type: string
+          nullable: true
+        customFields:
+          type: object
+          additionalProperties: true
+          nullable: true
+
+    EntityCreateResponse:
+      type: object
+      required: [module, id, displayName]
+      properties:
+        module:
+          type: string
+          enum: [Contacts, Leads, Accounts, Notes, Emails]
+        id:
+          type: string
+        displayName:
+          type: string
+        link:
+          type: string
+          nullable: true
+
+    # ---------- Email ----------
+    EmailLogRequest:
+      type: object
+      required: [message, linkTo]
+      properties:
+        message:
+          $ref: "#/components/schemas/EmailMessage"
+        linkTo:
+          $ref: "#/components/schemas/LinkTarget"
+        options:
+          $ref: "#/components/schemas/EmailLogOptions"
+
+    EmailLogResponse:
+      type: object
+      required: [loggedRecord]
+      properties:
+        loggedRecord:
+          $ref: "#/components/schemas/EntityCreateResponse"
+        deduplicated:
+          type: boolean
+          description: True if an existing log was found and reused.
+          default: false
+
+    EmailLogOptions:
+      type: object
+      properties:
+        storeBody:
+          type: boolean
+          default: false
+          description: Store email body (policy-controlled).
+        storeAttachments:
+          type: boolean
+          default: false
+          description: Store attachments (policy-controlled; may be ignored in v0.1).
+        maxAttachmentBytes:
+          type: integer
+          nullable: true
+          description: Optional server-side guardrail.
+
+    LinkTarget:
+      type: object
+      required: [module, id]
+      properties:
+        module:
+          type: string
+          enum: [Contacts, Leads, Accounts, Opportunities, Cases]
+        id:
+          type: string
+
+    EmailMessage:
+      type: object
+      required: [internetMessageId, subject, from, to, sentAt]
+      properties:
+        internetMessageId:
+          type: string
+          description: Prefer RFC822 Message-ID (Outlook/Graph/Office.js availability varies by host).
+          example: "<abc123@mail.example.com>"
+        outlookItemId:
+          type: string
+          nullable: true
+          description: Outlook internal item id (optional; host-specific).
+        subject:
+          type: string
+        from:
+          $ref: "#/components/schemas/EmailParty"
+        to:
+          type: array
+          items: { $ref: "#/components/schemas/EmailParty" }
+        cc:
+          type: array
+          items: { $ref: "#/components/schemas/EmailParty" }
+          default: []
+        sentAt:
+          type: string
+          format: date-time
+        receivedAt:
+          type: string
+          format: date-time
+          nullable: true
+        bodyText:
+          type: string
+          nullable: true
+          description: Plain text body (optional; may be truncated by client).
+        bodyHtml:
+          type: string
+          nullable: true
+          description: HTML body (optional; policy-controlled).
+        attachments:
+          type: array
+          items: { $ref: "#/components/schemas/Attachment" }
+          default: []
+
+    EmailParty:
+      type: object
+      required: [email]
+      properties:
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+
+    Attachment:
+      type: object
+      required: [name, sizeBytes]
+      properties:
+        name:
+          type: string
+        sizeBytes:
+          type: integer
+        contentType:
+          type: string
+          nullable: true
+        contentBase64:
+          type: string
+          nullable: true
+          description: Base64 content (optional; may be omitted in v0.1).
+
+    # ---------- Errors ----------
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: "bad_request"
+        message:
+          type: string
+          example: "Missing required field: email"
+        requestId:
+          type: string
+          nullable: true
+          description: Correlation id for support/debugging.
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
