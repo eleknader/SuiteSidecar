@@ -6,6 +6,10 @@ namespace SuiteSidecar;
 
 use SuiteSidecar\Http\Response;
 use SuiteSidecar\SuiteCrm\CrmAdapterInterface;
+use SuiteSidecar\SuiteCrm\SuiteCrmAuthException;
+use SuiteSidecar\SuiteCrm\SuiteCrmBadResponseException;
+use SuiteSidecar\SuiteCrm\SuiteCrmException;
+use SuiteSidecar\SuiteCrm\SuiteCrmHttpException;
 
 final class LookupController
 {
@@ -25,7 +29,26 @@ final class LookupController
         // Parse include=account,timeline (optional)
         $includeRaw = isset($_GET['include']) ? (string)$_GET['include'] : '';
         $include = array_values(array_filter(array_map('trim', explode(',', $includeRaw))));
-        $payload = $this->adapter->lookupByEmail($email, $include);
-        Response::json($payload, 200);
+
+        try {
+            $payload = $this->adapter->lookupByEmail($email, $include);
+            Response::json($payload, 200);
+        } catch (SuiteCrmAuthException) {
+            error_log('[requestId=' . Response::requestId() . '] SuiteCRM auth failed during lookup');
+            Response::error('suitecrm_auth_failed', 'SuiteCRM authentication failed', 502);
+        } catch (SuiteCrmBadResponseException) {
+            error_log('[requestId=' . Response::requestId() . '] SuiteCRM returned invalid response payload');
+            Response::error('suitecrm_bad_response', 'SuiteCRM returned an invalid response', 502);
+        } catch (SuiteCrmHttpException $e) {
+            error_log(
+                '[requestId=' . Response::requestId() . '] SuiteCRM HTTP error'
+                . ' endpoint=' . $e->getEndpoint()
+                . ' status=' . $e->getStatus()
+            );
+            Response::error('suitecrm_unreachable', 'SuiteCRM is temporarily unreachable', 502);
+        } catch (SuiteCrmException) {
+            error_log('[requestId=' . Response::requestId() . '] SuiteCRM request failed');
+            Response::error('suitecrm_unreachable', 'SuiteCRM is temporarily unreachable', 502);
+        }
     }
 }

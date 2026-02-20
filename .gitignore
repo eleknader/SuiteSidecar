@@ -1,1 +1,12 @@
 connector-php/vendor/
+connector-php/var/tokens/
+connector-php/config/profiles.php
+connector-php/var/
+!connector-php/var/
+connector-php/var/*
+.log
+.env
+.env.
+vendor/
+!connector-php/var/.gitkeep
+suitesidecar.code-workspace

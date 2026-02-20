@@ -2,22 +2,39 @@
 
 ## Composer clean-state verification
 
-Run from project root:
+Run from `connector-php`:
 
 ```bash
-cd /opt/evomax/suitesidecar/connector-php
+cd connector-php
 rm -rf vendor
 composer install
 composer dump-autoload
 ```
 
+## Profile OAuth secrets via environment variables
+
+Profile id `example-dev` is normalized to `EXAMPLE_DEV` for env keys.
+
+```bash
+export SUITESIDECAR_EXAMPLE_DEV_CLIENT_ID="your-client-id"
+export SUITESIDECAR_EXAMPLE_DEV_CLIENT_SECRET="your-client-secret"
+```
+
+General pattern:
+
+```bash
+SUITESIDECAR_<PROFILEID_NORMALIZED>_CLIENT_ID
+SUITESIDECAR_<PROFILEID_NORMALIZED>_CLIENT_SECRET
+```
+
 ## API smoke tests (normal DNS path)
 
 ```bash
-curl -sS https://suitesidecar.example.com/health
-curl -sS https://suitesidecar.example.com/version
-curl -sS https://suitesidecar.example.com/profiles
-curl -sS "https://suitesidecar.example.com/lookup/by-email?email=test%2Bfound@example.com&include=account,timeline"
+BASE_URL="https://connector.example.com"
+curl -sS "${BASE_URL}/health"
+curl -sS "${BASE_URL}/version"
+curl -sS "${BASE_URL}/profiles"
+curl -sS "${BASE_URL}/lookup/by-email?email=known.user@example.com&include=account"
 ```
 
 ## How to test before DNS propagation
@@ -26,16 +43,17 @@ Use `--resolve` to force hostname + TLS SNI to this server IP:
 
 ```bash
 SERVER_IP=127.0.0.1
+HOSTNAME="connector.example.com"
 
-curl -sS --resolve suitesidecar.example.com:443:${SERVER_IP} \
-  https://suitesidecar.example.com/health
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  https://${HOSTNAME}/health
 
-curl -sS --resolve suitesidecar.example.com:443:${SERVER_IP} \
-  https://suitesidecar.example.com/version
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  https://${HOSTNAME}/version
 
-curl -sS --resolve suitesidecar.example.com:443:${SERVER_IP} \
-  https://suitesidecar.example.com/profiles
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  https://${HOSTNAME}/profiles
 
-curl -sS --resolve suitesidecar.example.com:443:${SERVER_IP} \
-  "https://suitesidecar.example.com/lookup/by-email?email=test%2Bfound@example.com&include=account,timeline"
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  "https://${HOSTNAME}/lookup/by-email?email=known.user@example.com&include=account"
 ```
