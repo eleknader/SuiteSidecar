@@ -11,6 +11,20 @@ composer install
 composer dump-autoload
 ```
 
+## Local secrets setup
+
+Install server-local secrets file and permissions:
+
+```bash
+sudo ops/scripts/env-install.sh
+```
+
+Run one-command smoke checks against local Apache (with `--resolve`):
+
+```bash
+ops/scripts/smoke.sh
+```
+
 ## Profile OAuth secrets via environment variables
 
 Profile id `example-dev` is normalized to `EXAMPLE_DEV` for env keys.
