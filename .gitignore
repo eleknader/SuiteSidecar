@@ -1,5 +1,6 @@
 connector-php/vendor/
 connector-php/var/tokens/
+connector-php/var/sessions/
 connector-php/config/profiles.php
 connector-php/var/
 !connector-php/var/

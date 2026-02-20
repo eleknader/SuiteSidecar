@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace SuiteSidecar\SuiteCrm;
 
-final class OAuthTokenProvider
+final class OAuthTokenProvider implements AccessTokenProviderInterface
 {
     private const MIN_TTL_SECONDS = 30;
     private const DEFAULT_EXPIRES_IN = 300;
@@ -25,7 +25,7 @@ final class OAuthTokenProvider
     public function getAccessToken(Profile $profile): string
     {
         if ($profile->oauthGrantType !== 'client_credentials') {
-            throw new SuiteCrmAuthException('Unsupported OAuth grant type');
+            throw new SuiteCrmAuthException('Unsupported OAuth grant type', 401);
         }
 
         $cachedToken = $this->loadFromMemoryCache($profile->id);
@@ -40,18 +40,81 @@ final class OAuthTokenProvider
 
         if ($profile->oauthClientId === '' || $profile->oauthClientSecret === '') {
             $this->log('Token fetch failed: missing client credentials for profile ' . $profile->id);
-            throw new SuiteCrmAuthException('Missing OAuth client credentials');
+            throw new SuiteCrmAuthException('Missing OAuth client credentials', 401);
         }
 
-        $formData = http_build_query([
+        $tokenPayload = $this->requestTokenPayload($profile, [
             'grant_type' => 'client_credentials',
             'client_id' => $profile->oauthClientId,
             'client_secret' => $profile->oauthClientSecret,
-        ], '', '&', PHP_QUERY_RFC3986);
+        ]);
+
+        $accessToken = $tokenPayload['access_token'] ?? null;
+        if (!is_string($accessToken) || $accessToken === '') {
+            $this->log('Token fetch failed for profile ' . $profile->id . ': access_token missing');
+            throw new SuiteCrmAuthException('SuiteCRM token endpoint did not return access_token', 502);
+        }
+
+        $expiresIn = isset($tokenPayload['expires_in']) ? (int) $tokenPayload['expires_in'] : self::DEFAULT_EXPIRES_IN;
+        if ($expiresIn <= 0) {
+            $expiresIn = self::DEFAULT_EXPIRES_IN;
+        }
+
+        $expiresAt = time() + $expiresIn;
+        $this->memoryCache[$profile->id] = [
+            'accessToken' => $accessToken,
+            'expiresAt' => $expiresAt,
+        ];
+        $this->saveToFileCache($profile->id, $accessToken, $expiresAt);
+
+        return $accessToken;
+    }
+
+    public function loginWithPasswordGrant(Profile $profile, string $username, string $password): array
+    {
+        if ($profile->oauthClientId === '' || $profile->oauthClientSecret === '') {
+            $this->log('Password grant failed: missing client credentials for profile ' . $profile->id);
+            throw new SuiteCrmAuthException('Missing OAuth client credentials', 401);
+        }
+
+        $tokenPayload = $this->requestTokenPayload($profile, [
+            'grant_type' => 'password',
+            'client_id' => $profile->oauthClientId,
+            'client_secret' => $profile->oauthClientSecret,
+            'username' => $username,
+            'password' => $password,
+        ]);
+
+        $accessToken = $tokenPayload['access_token'] ?? null;
+        if (!is_string($accessToken) || $accessToken === '') {
+            $this->log('Password grant failed for profile ' . $profile->id . ': access_token missing');
+            throw new SuiteCrmAuthException('SuiteCRM token endpoint did not return access_token', 502);
+        }
+
+        $refreshToken = isset($tokenPayload['refresh_token']) ? (string) $tokenPayload['refresh_token'] : null;
+        if ($refreshToken === '') {
+            $refreshToken = null;
+        }
+
+        $expiresIn = isset($tokenPayload['expires_in']) ? (int) $tokenPayload['expires_in'] : self::DEFAULT_EXPIRES_IN;
+        if ($expiresIn <= 0) {
+            $expiresIn = self::DEFAULT_EXPIRES_IN;
+        }
+
+        return [
+            'accessToken' => $accessToken,
+            'refreshToken' => $refreshToken,
+            'expiresAt' => time() + $expiresIn,
+        ];
+    }
+
+    private function requestTokenPayload(Profile $profile, array $params): array
+    {
+        $formData = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 
         $ch = curl_init($profile->oauthTokenUrl);
         if ($ch === false) {
-            throw new SuiteCrmAuthException('Failed to initialize token request');
+            throw new SuiteCrmAuthException('Failed to initialize token request', 502);
         }
 
         curl_setopt_array($ch, [
@@ -72,7 +135,7 @@ final class OAuthTokenProvider
             $curlError = curl_error($ch);
             curl_close($ch);
             $this->log('Token fetch failed for profile ' . $profile->id . ': transport error');
-            throw new SuiteCrmAuthException('Unable to reach SuiteCRM token endpoint: ' . $curlError);
+            throw new SuiteCrmAuthException('Unable to reach SuiteCRM token endpoint: ' . $curlError, 502);
         }
 
         $statusCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -84,34 +147,17 @@ final class OAuthTokenProvider
                 . ': HTTP ' . $statusCode
                 . ' body="' . $this->bodySnippet((string) $rawResponse) . '"'
             );
-            throw new SuiteCrmAuthException('SuiteCRM token endpoint rejected the request');
+            $responseStatus = $statusCode === 400 || $statusCode === 401 ? 401 : 502;
+            throw new SuiteCrmAuthException('SuiteCRM token endpoint rejected the request', $responseStatus);
         }
 
         $decoded = json_decode((string) $rawResponse, true);
         if (!is_array($decoded)) {
             $this->log('Token fetch failed for profile ' . $profile->id . ': invalid JSON response');
-            throw new SuiteCrmAuthException('SuiteCRM token endpoint returned invalid JSON');
+            throw new SuiteCrmAuthException('SuiteCRM token endpoint returned invalid JSON', 502);
         }
 
-        $accessToken = $decoded['access_token'] ?? null;
-        if (!is_string($accessToken) || $accessToken === '') {
-            $this->log('Token fetch failed for profile ' . $profile->id . ': access_token missing');
-            throw new SuiteCrmAuthException('SuiteCRM token endpoint did not return access_token');
-        }
-
-        $expiresIn = isset($decoded['expires_in']) ? (int) $decoded['expires_in'] : self::DEFAULT_EXPIRES_IN;
-        if ($expiresIn <= 0) {
-            $expiresIn = self::DEFAULT_EXPIRES_IN;
-        }
-
-        $expiresAt = time() + $expiresIn;
-        $this->memoryCache[$profile->id] = [
-            'accessToken' => $accessToken,
-            'expiresAt' => $expiresAt,
-        ];
-        $this->saveToFileCache($profile->id, $accessToken, $expiresAt);
-
-        return $accessToken;
+        return $decoded;
     }
 
     private function loadFromMemoryCache(string $profileId): ?string

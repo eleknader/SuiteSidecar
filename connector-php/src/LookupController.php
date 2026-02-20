@@ -33,9 +33,13 @@ final class LookupController
         try {
             $payload = $this->adapter->lookupByEmail($email, $include);
             Response::json($payload, 200);
-        } catch (SuiteCrmAuthException) {
+        } catch (SuiteCrmAuthException $e) {
             error_log('[requestId=' . Response::requestId() . '] SuiteCRM auth failed during lookup');
-            Response::error('suitecrm_auth_failed', 'SuiteCRM authentication failed', 502);
+            $statusCode = $e->getStatusCode();
+            if (!in_array($statusCode, [401, 502], true)) {
+                $statusCode = 401;
+            }
+            Response::error('suitecrm_auth_failed', 'SuiteCRM authentication failed', $statusCode);
         } catch (SuiteCrmBadResponseException) {
             error_log('[requestId=' . Response::requestId() . '] SuiteCRM returned invalid response payload');
             Response::error('suitecrm_bad_response', 'SuiteCRM returned an invalid response', 502);
@@ -45,6 +49,10 @@ final class LookupController
                 . ' endpoint=' . $e->getEndpoint()
                 . ' status=' . $e->getStatus()
             );
+            if (in_array($e->getStatus(), [401, 403], true)) {
+                Response::error('suitecrm_auth_failed', 'SuiteCRM authentication failed', 401);
+                return;
+            }
             Response::error('suitecrm_unreachable', 'SuiteCRM is temporarily unreachable', 502);
         } catch (SuiteCrmException) {
             error_log('[requestId=' . Response::requestId() . '] SuiteCRM request failed');

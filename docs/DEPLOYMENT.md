@@ -27,6 +27,20 @@ SUITESIDECAR_<PROFILEID_NORMALIZED>_CLIENT_ID
 SUITESIDECAR_<PROFILEID_NORMALIZED>_CLIENT_SECRET
 ```
 
+## Connector JWT secret
+
+`/auth/login` and authenticated endpoints require:
+
+```bash
+export SUITESIDECAR_JWT_SECRET="replace-with-long-random-secret"
+```
+
+Optional token lifetime override (default: 8h):
+
+```bash
+export SUITESIDECAR_JWT_TTL_SECONDS="28800"
+```
+
 ## API smoke tests (normal DNS path)
 
 ```bash
@@ -34,7 +48,23 @@ BASE_URL="https://connector.example.com"
 curl -sS "${BASE_URL}/health"
 curl -sS "${BASE_URL}/version"
 curl -sS "${BASE_URL}/profiles"
-curl -sS "${BASE_URL}/lookup/by-email?email=known.user@example.com&include=account"
+
+LOGIN_RESPONSE=$(curl -sS -X POST "${BASE_URL}/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profileId":"example-dev",
+    "username":"user@example.com",
+    "password":"your-password"
+  }')
+
+TOKEN=$(printf "%s" "${LOGIN_RESPONSE}" | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["token"] ?? "";')
+
+curl -sS "${BASE_URL}/lookup/by-email?profileId=example-dev&email=known.user@example.com&include=account" \
+  -H "Authorization: Bearer ${TOKEN}"
+
+curl -sS "${BASE_URL}/lookup/by-email?email=known.user@example.com&include=account" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "X-SuiteSidecar-Profile: example-dev"
 ```
 
 ## How to test before DNS propagation
@@ -54,6 +84,23 @@ curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
 curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
   https://${HOSTNAME}/profiles
 
+LOGIN_RESPONSE=$(curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  -X POST "https://${HOSTNAME}/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profileId":"example-dev",
+    "username":"user@example.com",
+    "password":"your-password"
+  }')
+
+TOKEN=$(printf "%s" "${LOGIN_RESPONSE}" | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["token"] ?? "";')
+
 curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
-  "https://${HOSTNAME}/lookup/by-email?email=known.user@example.com&include=account"
+  "https://${HOSTNAME}/lookup/by-email?profileId=example-dev&email=known.user@example.com&include=account" \
+  -H "Authorization: Bearer ${TOKEN}"
+
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  "https://${HOSTNAME}/lookup/by-email?email=known.user@example.com&include=account" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "X-SuiteSidecar-Profile: example-dev"
 ```

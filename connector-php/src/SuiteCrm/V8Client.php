@@ -10,12 +10,14 @@ final class V8Client
 
     public function __construct(
         string $baseUrl,
-        private readonly OAuthTokenProvider $tokenProvider,
+        private readonly AccessTokenProviderInterface $tokenProvider,
         private readonly Profile $profile,
         private readonly string $requestId,
     ) {
         $this->baseUrl = rtrim($baseUrl, '/');
-        $this->tokenProvider->setRequestId($requestId);
+        if (method_exists($this->tokenProvider, 'setRequestId')) {
+            $this->tokenProvider->setRequestId($requestId);
+        }
     }
 
     public function get(string $path, array $query = []): array
