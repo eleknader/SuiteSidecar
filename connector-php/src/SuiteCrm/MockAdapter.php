@@ -115,4 +115,44 @@ final class MockAdapter implements CrmAdapterInterface
             'deduplicated' => false,
         ];
     }
+
+    public function createContact(array $payload): array
+    {
+        $firstName = trim((string) ($payload['firstName'] ?? ''));
+        $lastName = trim((string) ($payload['lastName'] ?? ''));
+        $email = trim((string) ($payload['email'] ?? ''));
+
+        $id = 'mock-contact-' . bin2hex(random_bytes(6));
+        $displayName = trim($firstName . ' ' . $lastName);
+        if ($displayName === '') {
+            $displayName = $email !== '' ? $email : 'Mock Contact';
+        }
+
+        return [
+            'module' => 'Contacts',
+            'id' => $id,
+            'displayName' => $displayName,
+            'link' => 'https://crm.example.com/#Contacts/' . $id,
+        ];
+    }
+
+    public function createLead(array $payload): array
+    {
+        $firstName = trim((string) ($payload['firstName'] ?? ''));
+        $lastName = trim((string) ($payload['lastName'] ?? ''));
+        $email = trim((string) ($payload['email'] ?? ''));
+
+        $id = 'mock-lead-' . bin2hex(random_bytes(6));
+        $displayName = trim($firstName . ' ' . $lastName);
+        if ($displayName === '') {
+            $displayName = $email !== '' ? $email : 'Mock Lead';
+        }
+
+        return [
+            'module' => 'Leads',
+            'id' => $id,
+            'displayName' => $displayName,
+            'link' => 'https://crm.example.com/#Leads/' . $id,
+        ];
+    }
 }

@@ -142,6 +142,24 @@ else
   mark_fail "POST /email/log?profileId=example-dev -> ${code}" "$body" "$headers"
 fi
 
+# /entities/contacts (auth required)
+contact_payload='{"firstName":"Smoke","lastName":"Contact","email":"smoke.contact@example.com"}'
+IFS='|' read -r code body headers < <(request "entities-contact" "POST" "/entities/contacts?profileId=example-dev" "${contact_payload}" "" "")
+if [[ "${code}" == "401" ]]; then
+  mark_pass "POST /entities/contacts?profileId=example-dev -> 401"
+else
+  mark_fail "POST /entities/contacts?profileId=example-dev -> ${code}" "$body" "$headers"
+fi
+
+# /entities/leads (auth required)
+lead_payload='{"firstName":"Smoke","lastName":"Lead","email":"smoke.lead@example.com"}'
+IFS='|' read -r code body headers < <(request "entities-lead" "POST" "/entities/leads?profileId=example-dev" "${lead_payload}" "" "")
+if [[ "${code}" == "401" ]]; then
+  mark_pass "POST /entities/leads?profileId=example-dev -> 401"
+else
+  mark_fail "POST /entities/leads?profileId=example-dev -> ${code}" "$body" "$headers"
+fi
+
 # /auth/login only if endpoint exists
 login_payload='{"profileId":"example-dev","username":"smoke-user","password":"smoke-pass"}'
 IFS='|' read -r code body headers < <(request "login" "POST" "/auth/login" "${login_payload}" "" "")

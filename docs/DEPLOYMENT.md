@@ -99,6 +99,26 @@ curl -sS "${BASE_URL}/lookup/by-email?email=known.user@example.com&include=accou
   -H "Authorization: Bearer ${TOKEN}" \
   -H "X-SuiteSidecar-Profile: example-dev"
 
+curl -sS -X POST "${BASE_URL}/entities/contacts?profileId=example-dev" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName":"Matti",
+    "lastName":"Meikäläinen",
+    "email":"matti.meikalainen@example.com",
+    "title":"Sales Manager"
+  }'
+
+curl -sS -X POST "${BASE_URL}/entities/leads?profileId=example-dev" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName":"Laura",
+    "lastName":"Lead",
+    "email":"laura.lead@example.com",
+    "company":"Example Oy"
+  }'
+
 curl -sS -X POST "${BASE_URL}/email/log?profileId=example-dev" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
@@ -160,6 +180,28 @@ curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
   "https://${HOSTNAME}/lookup/by-email?email=known.user@example.com&include=account" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "X-SuiteSidecar-Profile: example-dev"
+
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  -X POST "https://${HOSTNAME}/entities/contacts?profileId=example-dev" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName":"Matti",
+    "lastName":"Meikäläinen",
+    "email":"matti.meikalainen@example.com",
+    "title":"Sales Manager"
+  }'
+
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  -X POST "https://${HOSTNAME}/entities/leads?profileId=example-dev" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName":"Laura",
+    "lastName":"Lead",
+    "email":"laura.lead@example.com",
+    "company":"Example Oy"
+  }'
 
 curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
   -X POST "https://${HOSTNAME}/email/log?profileId=example-dev" \

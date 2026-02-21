@@ -8,6 +8,7 @@ use SuiteSidecar\Auth\AuthException;
 use SuiteSidecar\Auth\JwtService;
 use SuiteSidecar\Auth\SessionStore;
 use SuiteSidecar\EmailLogController;
+use SuiteSidecar\EntitiesController;
 use SuiteSidecar\Http\Router;
 use SuiteSidecar\Http\Response;
 use SuiteSidecar\LookupController;
@@ -208,6 +209,84 @@ try {
             Response::error('bad_request', $e->getMessage(), 400);
         } catch (AuthException $e) {
             error_log('[requestId=' . Response::requestId() . '] Lookup auth setup failed: ' . $e->getMessage());
+            Response::error('server_error', 'Internal server error', 500);
+        }
+    });
+    $router->post('/entities/contacts', static function () use (
+        $buildJwtService,
+        $readHeaders,
+        $sessionStore,
+        $profileResolver,
+        $buildAdapterForSession
+    ): void {
+        $jwtService = $buildJwtService();
+        if ($jwtService === null) {
+            Response::error('server_error', 'Authentication service is not configured', 500);
+            return;
+        }
+
+        try {
+            $headers = $readHeaders();
+            $authMiddleware = new AuthMiddleware($jwtService, $sessionStore);
+            $authContext = $authMiddleware->requireAuth($headers);
+            if ($authContext === null) {
+                return;
+            }
+
+            $profile = $profileResolver->resolve($_GET, $headers);
+            $session = isset($authContext['session']) && is_array($authContext['session']) ? $authContext['session'] : [];
+            $sessionProfileId = isset($session['profileId']) ? (string) $session['profileId'] : '';
+            if ($sessionProfileId !== '' && $sessionProfileId !== $profile->id) {
+                Response::error('unauthorized', 'Profile does not match authenticated session', 401);
+                return;
+            }
+
+            $adapter = $buildAdapterForSession($profile, $session);
+            $entitiesController = new EntitiesController($adapter);
+            $entitiesController->createContact();
+        } catch (ProfileResolutionException $e) {
+            Response::error('bad_request', $e->getMessage(), 400);
+        } catch (AuthException $e) {
+            error_log('[requestId=' . Response::requestId() . '] Contact create auth setup failed: ' . $e->getMessage());
+            Response::error('server_error', 'Internal server error', 500);
+        }
+    });
+    $router->post('/entities/leads', static function () use (
+        $buildJwtService,
+        $readHeaders,
+        $sessionStore,
+        $profileResolver,
+        $buildAdapterForSession
+    ): void {
+        $jwtService = $buildJwtService();
+        if ($jwtService === null) {
+            Response::error('server_error', 'Authentication service is not configured', 500);
+            return;
+        }
+
+        try {
+            $headers = $readHeaders();
+            $authMiddleware = new AuthMiddleware($jwtService, $sessionStore);
+            $authContext = $authMiddleware->requireAuth($headers);
+            if ($authContext === null) {
+                return;
+            }
+
+            $profile = $profileResolver->resolve($_GET, $headers);
+            $session = isset($authContext['session']) && is_array($authContext['session']) ? $authContext['session'] : [];
+            $sessionProfileId = isset($session['profileId']) ? (string) $session['profileId'] : '';
+            if ($sessionProfileId !== '' && $sessionProfileId !== $profile->id) {
+                Response::error('unauthorized', 'Profile does not match authenticated session', 401);
+                return;
+            }
+
+            $adapter = $buildAdapterForSession($profile, $session);
+            $entitiesController = new EntitiesController($adapter);
+            $entitiesController->createLead();
+        } catch (ProfileResolutionException $e) {
+            Response::error('bad_request', $e->getMessage(), 400);
+        } catch (AuthException $e) {
+            error_log('[requestId=' . Response::requestId() . '] Lead create auth setup failed: ' . $e->getMessage());
             Response::error('server_error', 'Internal server error', 500);
         }
     });

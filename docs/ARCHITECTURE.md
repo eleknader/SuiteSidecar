@@ -5,7 +5,8 @@
 
 > Current implementation direction (Q1 2026): contract-first connector hardening and
 > incremental delivery of authenticated profile-scoped endpoints (`/auth/login`,
-> `/auth/logout`, `/lookup/by-email`, `/email/log`) before add-in UI expansion.
+> `/auth/logout`, `/lookup/by-email`, `/entities/contacts`, `/entities/leads`,
+> `/email/log`) before add-in UI expansion.
 
 ---
 

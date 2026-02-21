@@ -105,6 +105,70 @@ final class V8Adapter implements CrmAdapterInterface
         ];
     }
 
+    public function createContact(array $payload): array
+    {
+        $attributes = [
+            'first_name' => (string) ($payload['firstName'] ?? ''),
+            'last_name' => (string) ($payload['lastName'] ?? ''),
+            'email1' => (string) ($payload['email'] ?? ''),
+            'title' => (string) ($payload['title'] ?? ''),
+            'phone_work' => (string) ($payload['phone'] ?? ''),
+        ];
+
+        $source = trim((string) ($payload['source'] ?? ''));
+        if ($source !== '') {
+            $attributes['lead_source'] = $source;
+        }
+
+        $accountName = trim((string) ($payload['accountName'] ?? ''));
+        if ($accountName !== '') {
+            $attributes['account_name'] = $accountName;
+        }
+
+        $this->mergeCustomFields($attributes, $payload['customFields'] ?? null);
+
+        $response = $this->client->post('/Api/V8/module/Contacts', [
+            'data' => [
+                'type' => 'Contacts',
+                'attributes' => $attributes,
+            ],
+        ]);
+
+        return $this->mapEntityCreateResponse($response, 'Contacts', 'email1');
+    }
+
+    public function createLead(array $payload): array
+    {
+        $attributes = [
+            'first_name' => (string) ($payload['firstName'] ?? ''),
+            'last_name' => (string) ($payload['lastName'] ?? ''),
+            'email1' => (string) ($payload['email'] ?? ''),
+            'title' => (string) ($payload['title'] ?? ''),
+            'phone_work' => (string) ($payload['phone'] ?? ''),
+        ];
+
+        $company = trim((string) ($payload['company'] ?? ''));
+        if ($company !== '') {
+            $attributes['account_name'] = $company;
+        }
+
+        $source = trim((string) ($payload['source'] ?? ''));
+        if ($source !== '') {
+            $attributes['lead_source'] = $source;
+        }
+
+        $this->mergeCustomFields($attributes, $payload['customFields'] ?? null);
+
+        $response = $this->client->post('/Api/V8/module/Leads', [
+            'data' => [
+                'type' => 'Leads',
+                'attributes' => $attributes,
+            ],
+        ]);
+
+        return $this->mapEntityCreateResponse($response, 'Leads', 'email1');
+    }
+
     private function queryFirstPerson(string $module, string $email): ?array
     {
         $response = $this->client->get('/Api/V8/module/' . $module, [
@@ -285,5 +349,61 @@ final class V8Adapter implements CrmAdapterInterface
         }
 
         return implode(', ', $emails);
+    }
+
+    private function mergeCustomFields(array &$attributes, mixed $customFields): void
+    {
+        if (!is_array($customFields)) {
+            return;
+        }
+
+        foreach ($customFields as $key => $value) {
+            $field = trim((string) $key);
+            if ($field === '') {
+                continue;
+            }
+
+            if (is_scalar($value) || $value === null) {
+                $attributes[$field] = $value;
+            }
+        }
+    }
+
+    private function mapEntityCreateResponse(array $response, string $module, string $emailField): array
+    {
+        $item = $response['data'] ?? null;
+        if (!is_array($item)) {
+            throw new SuiteCrmBadResponseException('SuiteCRM response is missing created entity payload');
+        }
+
+        $id = isset($item['id']) ? (string) $item['id'] : '';
+        if ($id === '') {
+            throw new SuiteCrmBadResponseException('SuiteCRM response is missing created entity id');
+        }
+
+        $attributes = $item['attributes'] ?? [];
+        if (!is_array($attributes)) {
+            $attributes = [];
+        }
+
+        $firstName = trim((string) ($attributes['first_name'] ?? ''));
+        $lastName = trim((string) ($attributes['last_name'] ?? ''));
+        $displayName = trim($firstName . ' ' . $lastName);
+        if ($displayName === '') {
+            $displayName = trim((string) ($attributes['name'] ?? ''));
+        }
+        if ($displayName === '') {
+            $displayName = trim((string) ($attributes[$emailField] ?? ''));
+        }
+        if ($displayName === '') {
+            $displayName = $module . ' ' . $id;
+        }
+
+        return [
+            'module' => $module,
+            'id' => $id,
+            'displayName' => substr($displayName, 0, 255),
+            'link' => $this->profile->deepLink($module, $id),
+        ];
     }
 }
