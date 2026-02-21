@@ -29,88 +29,16 @@ final class EmailLogController
             return;
         }
 
-        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : null;
-        $linkTo = isset($payload['linkTo']) && is_array($payload['linkTo']) ? $payload['linkTo'] : null;
-        if ($message === null || $linkTo === null) {
-            Response::error('bad_request', 'Missing required fields: message, linkTo', 400);
+        $normalized = $this->normalizePayload($payload);
+        if ($normalized === null) {
             return;
         }
-
-        $internetMessageId = trim((string) ($message['internetMessageId'] ?? ''));
-        $subject = trim((string) ($message['subject'] ?? ''));
-        $sentAt = trim((string) ($message['sentAt'] ?? ''));
-        $from = isset($message['from']) && is_array($message['from']) ? $message['from'] : [];
-        $to = isset($message['to']) && is_array($message['to']) ? $message['to'] : [];
-
-        if ($internetMessageId === '' || $subject === '' || $sentAt === '') {
-            Response::error('bad_request', 'Missing required message fields', 400);
-            return;
-        }
-
-        if ($this->parseDateTime($sentAt) === null) {
-            Response::error('bad_request', 'Invalid sentAt datetime format', 400);
-            return;
-        }
-
-        $fromEmail = trim((string) ($from['email'] ?? ''));
-        if (!$this->isValidEmail($fromEmail)) {
-            Response::error('bad_request', 'Invalid from.email', 400);
-            return;
-        }
-
-        if ($to === []) {
-            Response::error('bad_request', 'Missing required message recipients: to', 400);
-            return;
-        }
-
-        foreach ($to as $recipient) {
-            $recipientEmail = is_array($recipient) ? trim((string) ($recipient['email'] ?? '')) : '';
-            if (!$this->isValidEmail($recipientEmail)) {
-                Response::error('bad_request', 'Invalid recipient email in message.to', 400);
-                return;
-            }
-        }
-
-        $module = trim((string) ($linkTo['module'] ?? ''));
-        $linkId = trim((string) ($linkTo['id'] ?? ''));
-        if ($module === '' || $linkId === '') {
-            Response::error('bad_request', 'Missing required linkTo fields', 400);
-            return;
-        }
-
-        if (!in_array($module, self::ALLOWED_LINK_MODULES, true)) {
-            Response::error('bad_request', 'Invalid linkTo.module', 400);
-            return;
-        }
-
-        $options = isset($payload['options']) && is_array($payload['options']) ? $payload['options'] : [];
 
         try {
-            $result = $this->adapter->logEmail([
-                'message' => [
-                    'internetMessageId' => $internetMessageId,
-                    'subject' => $subject,
-                    'from' => $from,
-                    'to' => $to,
-                    'cc' => isset($message['cc']) && is_array($message['cc']) ? $message['cc'] : [],
-                    'sentAt' => $sentAt,
-                    'receivedAt' => isset($message['receivedAt']) ? (string) $message['receivedAt'] : null,
-                    'bodyText' => isset($message['bodyText']) ? (string) $message['bodyText'] : null,
-                    'bodyHtml' => isset($message['bodyHtml']) ? (string) $message['bodyHtml'] : null,
-                    'attachments' => isset($message['attachments']) && is_array($message['attachments']) ? $message['attachments'] : [],
-                ],
-                'linkTo' => [
-                    'module' => $module,
-                    'id' => $linkId,
-                ],
-                'options' => [
-                    'storeBody' => (bool) ($options['storeBody'] ?? false),
-                    'storeAttachments' => (bool) ($options['storeAttachments'] ?? false),
-                    'maxAttachmentBytes' => isset($options['maxAttachmentBytes']) ? (int) $options['maxAttachmentBytes'] : null,
-                ],
-            ]);
-
+            $result = $this->adapter->logEmail($normalized);
             Response::json($result, 201);
+        } catch (SuiteCrmConflictException) {
+            Response::error('conflict', 'Email has already been logged', 409);
         } catch (SuiteCrmAuthException $e) {
             error_log('[requestId=' . Response::requestId() . '] SuiteCRM auth failed during email log');
             $statusCode = $e->getStatusCode();
@@ -121,19 +49,12 @@ final class EmailLogController
         } catch (SuiteCrmBadResponseException) {
             error_log('[requestId=' . Response::requestId() . '] SuiteCRM returned invalid response payload for email log');
             Response::error('suitecrm_bad_response', 'SuiteCRM returned an invalid response', 502);
-        } catch (SuiteCrmConflictException $e) {
-            error_log('[requestId=' . Response::requestId() . '] SuiteCRM dedup conflict during email log');
-            Response::error('conflict', $e->getMessage() !== '' ? $e->getMessage() : 'Duplicate record', 409);
         } catch (SuiteCrmHttpException $e) {
             error_log(
                 '[requestId=' . Response::requestId() . '] SuiteCRM HTTP error'
                 . ' endpoint=' . $e->getEndpoint()
                 . ' status=' . $e->getStatus()
             );
-            if ($e->getStatus() === 409) {
-                Response::error('conflict', 'Duplicate record', 409);
-                return;
-            }
             if (in_array($e->getStatus(), [401, 403], true)) {
                 Response::error('suitecrm_auth_failed', 'SuiteCRM authentication failed', 401);
                 return;
@@ -143,6 +64,83 @@ final class EmailLogController
             error_log('[requestId=' . Response::requestId() . '] SuiteCRM request failed during email log');
             Response::error('suitecrm_unreachable', 'SuiteCRM is temporarily unreachable', 502);
         }
+    }
+
+    private function normalizePayload(array $payload): ?array
+    {
+        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : null;
+        $linkTo = isset($payload['linkTo']) && is_array($payload['linkTo']) ? $payload['linkTo'] : null;
+        if ($message === null || $linkTo === null) {
+            Response::error('bad_request', 'Missing required fields: message, linkTo', 400);
+            return null;
+        }
+
+        $internetMessageId = trim((string) ($message['internetMessageId'] ?? ''));
+        $subject = trim((string) ($message['subject'] ?? ''));
+        $sentAt = trim((string) ($message['sentAt'] ?? ''));
+        $from = isset($message['from']) && is_array($message['from']) ? $message['from'] : [];
+        $to = isset($message['to']) && is_array($message['to']) ? $message['to'] : [];
+
+        if ($internetMessageId === '' || $subject === '' || $sentAt === '') {
+            Response::error('bad_request', 'Missing required message fields', 400);
+            return null;
+        }
+
+        if ($this->parseDateTime($sentAt) === null) {
+            Response::error('bad_request', 'Invalid sentAt datetime format', 400);
+            return null;
+        }
+
+        $fromEmail = trim((string) ($from['email'] ?? ''));
+        if (!$this->isValidEmail($fromEmail)) {
+            Response::error('bad_request', 'Invalid from.email', 400);
+            return null;
+        }
+
+        if ($to === []) {
+            Response::error('bad_request', 'Missing required message recipients: to', 400);
+            return null;
+        }
+
+        foreach ($to as $recipient) {
+            $recipientEmail = is_array($recipient) ? trim((string) ($recipient['email'] ?? '')) : '';
+            if (!$this->isValidEmail($recipientEmail)) {
+                Response::error('bad_request', 'Invalid recipient email in message.to', 400);
+                return null;
+            }
+        }
+
+        $module = trim((string) ($linkTo['module'] ?? ''));
+        $linkId = trim((string) ($linkTo['id'] ?? ''));
+        if ($module === '' || $linkId === '') {
+            Response::error('bad_request', 'Missing required linkTo fields', 400);
+            return null;
+        }
+
+        if (!in_array($module, self::ALLOWED_LINK_MODULES, true)) {
+            Response::error('bad_request', 'Invalid linkTo.module', 400);
+            return null;
+        }
+
+        return [
+            'message' => [
+                'internetMessageId' => $internetMessageId,
+                'subject' => $subject,
+                'sentAt' => $sentAt,
+                'from' => $from,
+                'to' => $to,
+                'cc' => isset($message['cc']) && is_array($message['cc']) ? $message['cc'] : [],
+                'receivedAt' => isset($message['receivedAt']) ? (string) $message['receivedAt'] : null,
+                'bodyText' => isset($message['bodyText']) ? (string) $message['bodyText'] : null,
+                'bodyHtml' => isset($message['bodyHtml']) ? (string) $message['bodyHtml'] : null,
+                'attachments' => isset($message['attachments']) && is_array($message['attachments']) ? $message['attachments'] : [],
+            ],
+            'linkTo' => [
+                'module' => $module,
+                'id' => $linkId,
+            ],
+            'options' => isset($payload['options']) && is_array($payload['options']) ? $payload['options'] : [],
+        ];
     }
 
     private function readJsonBody(): ?array

@@ -134,4 +134,27 @@ final class MockAdapter implements CrmAdapterInterface
             'link' => 'https://crm.example.com/#Leads/' . $id,
         ];
     }
+
+    public function logEmail(array $payload): array
+    {
+        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : [];
+
+        $internetMessageId = strtolower(trim((string) ($message['internetMessageId'] ?? '')));
+        if (str_contains($internetMessageId, 'duplicate') || str_contains($internetMessageId, '+dup')) {
+            throw new SuiteCrmConflictException('Email has already been logged');
+        }
+
+        $subject = trim((string) ($message['subject'] ?? 'Email from Outlook'));
+        $id = 'mock-note-' . bin2hex(random_bytes(6));
+
+        return [
+            'loggedRecord' => [
+                'module' => 'Notes',
+                'id' => $id,
+                'displayName' => $subject !== '' ? $subject : 'Email from Outlook',
+                'link' => 'https://crm.example.com/#Notes/' . $id,
+            ],
+            'deduplicated' => false,
+        ];
+    }
 }

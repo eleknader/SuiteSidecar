@@ -114,6 +114,52 @@ final class V8Adapter implements CrmAdapterInterface
         return $this->mapEntityCreateResponse($response, 'Leads', 'email1');
     }
 
+    public function logEmail(array $payload): array
+    {
+        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : [];
+        $linkTo = isset($payload['linkTo']) && is_array($payload['linkTo']) ? $payload['linkTo'] : [];
+
+        $internetMessageId = trim((string) ($message['internetMessageId'] ?? ''));
+        if ($internetMessageId === '') {
+            throw new SuiteCrmBadResponseException('Missing message.internetMessageId for email logging');
+        }
+
+        $dedupeKey = $this->buildMessageDedupeKey($internetMessageId);
+        $existingRecord = $this->findExistingLoggedEmail($dedupeKey);
+        if ($existingRecord !== null) {
+            throw new SuiteCrmConflictException('Email has already been logged', $existingRecord);
+        }
+
+        $subject = trim((string) ($message['subject'] ?? ''));
+        $linkModule = trim((string) ($linkTo['module'] ?? ''));
+        $linkId = trim((string) ($linkTo['id'] ?? ''));
+
+        $attributes = [
+            'name' => substr($subject !== '' ? $subject : 'Email from Outlook', 0, 255),
+            'external_message_id_c' => $dedupeKey,
+            'suitesidecar_source_c' => 'suitesidecar',
+            'parent_type' => $linkModule,
+            'parent_id' => $linkId,
+        ];
+
+        $bodyText = isset($message['bodyText']) ? trim((string) $message['bodyText']) : '';
+        if ($bodyText !== '') {
+            $attributes['description'] = $bodyText;
+        }
+
+        $response = $this->client->post('/Api/V8/module/Notes', [
+            'data' => [
+                'type' => 'Notes',
+                'attributes' => $attributes,
+            ],
+        ]);
+
+        return [
+            'loggedRecord' => $this->mapEntityCreateResponse($response, 'Notes', 'name'),
+            'deduplicated' => false,
+        ];
+    }
+
     private function queryFirstPerson(string $module, string $email): ?array
     {
         $response = $this->client->get('/Api/V8/module/' . $module, [
@@ -133,6 +179,47 @@ final class V8Adapter implements CrmAdapterInterface
         }
 
         return $firstItem;
+    }
+
+    private function findExistingLoggedEmail(string $dedupeKey): ?array
+    {
+        $response = $this->client->get('/Api/V8/module/Notes', [
+            'filter[external_message_id_c][eq]' => $dedupeKey,
+            'page[size]' => 1,
+            'fields[Notes]' => 'name,external_message_id_c',
+        ]);
+
+        $data = $response['data'] ?? null;
+        if (!is_array($data) || $data === []) {
+            return null;
+        }
+
+        $firstItem = $data[0] ?? null;
+        if (!is_array($firstItem)) {
+            throw new SuiteCrmBadResponseException('SuiteCRM response is missing item data');
+        }
+
+        $id = isset($firstItem['id']) ? (string) $firstItem['id'] : '';
+        if ($id === '') {
+            throw new SuiteCrmBadResponseException('SuiteCRM response item missing id');
+        }
+
+        $attributes = $firstItem['attributes'] ?? [];
+        $name = is_array($attributes) ? trim((string) ($attributes['name'] ?? '')) : '';
+
+        return [
+            'module' => 'Notes',
+            'id' => $id,
+            'displayName' => $name !== '' ? $name : 'Email from Outlook',
+            'link' => $this->profile->deepLink('Notes', $id),
+        ];
+    }
+
+    private function buildMessageDedupeKey(string $internetMessageId): string
+    {
+        $normalizedMessageId = preg_replace('/\s+/', '', strtolower(trim($internetMessageId)));
+        $key = $this->profile->id . '|' . (string) $normalizedMessageId;
+        return substr($key, 0, 255);
     }
 
     private function mapPerson(array $item, string $module, string $emailFallback): array

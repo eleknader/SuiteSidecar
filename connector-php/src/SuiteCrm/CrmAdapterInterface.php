@@ -11,4 +11,6 @@ interface CrmAdapterInterface
     public function createContact(array $payload): array;
 
     public function createLead(array $payload): array;
+
+    public function logEmail(array $payload): array;
 }

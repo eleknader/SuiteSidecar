@@ -400,7 +400,7 @@ For each logged email, the connector will create a Note record with:
 | created_by | SuiteCRM user | From OAuth context |
 | assigned_user_id | SuiteCRM user | From OAuth context |
 | external_message_id (custom field) | internetMessageId | Used for deduplication |
-| suitesidecar_source (custom field) | "outlook_addin" | Audit marker |
+| suitesidecar_source (custom field) | "suitesidecar" | Audit marker |
 
 Custom fields required (created during connector installation if missing):
 - `external_message_id_c` (varchar, indexed)
@@ -410,8 +410,10 @@ Custom fields required (created during connector installation if missing):
 
 ### 14.3 Relationships
 
-After creating the Note record, the connector will link it to the target entity
-using SuiteCRM relationships.
+The connector stores the target entity reference directly on the Note via:
+
+- `parent_type`
+- `parent_id`
 
 Supported link targets (MVP):
 
@@ -423,13 +425,9 @@ Supported link targets (MVP):
 
 Connector flow:
 
-1. Create Note
-2. POST relationship link:
-   - `/module/{entity}/{id}/relationships`
-
-The connector must:
-- Resolve correct relationship name dynamically if needed
-- Handle failure gracefully (log error but do not duplicate Note)
+1. Build payload from incoming email metadata.
+2. Create Note in SuiteCRM v8 with `parent_type` and `parent_id`.
+3. Return normalized `loggedRecord` response.
 
 ---
 
@@ -440,22 +438,21 @@ Duplicate prevention is critical because:
 - ItemChanged event may fire multiple times.
 - Users may click "Log Email" repeatedly.
 
-#### Planned uniqueness key strategy
+#### Current uniqueness key strategy
 
-Primary key (target implementation):
+Primary key (implemented now):
 
 - `profileId + internetMessageId`
-- Persisted in dedicated custom fields on the logged record (for example:
-  `suitesidecar_message_id_c` + `suitesidecar_profile_id_c`)
+- Persisted in `external_message_id_c` as a normalized combined value.
 
 Connector logic:
 
 1. On log request, normalize incoming message identifiers.
 2. Query existing logs for the same `profileId + internetMessageId`.
-3. If found, return existing record with `deduplicated = true`.
-4. Otherwise create a new log record.
+3. If found, return `409 conflict` (`error.code = "conflict"`).
+4. Otherwise create a new Note record.
 
-#### Fallback when Message-ID is unavailable
+#### Fallback when Message-ID is unavailable (planned)
 
 If `internetMessageId` is missing on a host/client:
 
@@ -585,9 +582,9 @@ Or provide CLI script to create them
 ## 16. Summary of Email Logging Design
 Aspect	Decision
 Module	Notes (MVP)
-Dedup key	internetMessageId
+Dedup key	profileId + internetMessageId (stored in external_message_id_c)
 Attachments	Not in v0.1
-Relationships	Dynamic linking
+Relationships	parent_type + parent_id on Note
 Body storage	Policy-controlled
 Timeline	Normalized structure
 

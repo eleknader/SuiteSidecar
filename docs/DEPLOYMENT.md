@@ -48,6 +48,22 @@ Override target in development (for example local PHP server):
 SMOKE_SCHEME=http SMOKE_HOST=suitesidecar.local SMOKE_IP=127.0.0.1 SMOKE_PORT=18080 ops/scripts/smoke.sh
 ```
 
+Run authenticated end-to-end checks (login + lookup + create + email log duplicate conflict):
+
+```bash
+E2E_USERNAME="admin" E2E_PASSWORD="your-password" ops/scripts/e2e-auth.sh
+```
+
+Optional overrides:
+
+```bash
+E2E_PROFILE_ID=example-dev \
+E2E_LOOKUP_EMAIL=known.user@example.com \
+E2E_HOST=suitesidecar.example.com \
+E2E_IP=127.0.0.1 \
+ops/scripts/e2e-auth.sh
+```
+
 ## Runtime storage (`connector-php/var`)
 
 `connector-php/var` is runtime-only storage (tokens, sessions, temporary runtime data).
@@ -245,6 +261,7 @@ curl -sS --resolve suitesidecar.example.com:443:127.0.0.1 \
 
 Expected login: token returned.  
 Expected lookup: normalized JSON response (for missing email, `notFound: true` is valid).
+Expected duplicate email log with same `internetMessageId`: HTTP `409 conflict`.
 
 ## How to test before DNS propagation
 
