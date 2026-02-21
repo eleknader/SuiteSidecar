@@ -79,6 +79,10 @@ body {
   box-shadow: 0 8px 18px rgba(13, 24, 36, 0.05);
 }
 
+.is-hidden {
+  display: none !important;
+}
+
 .card h2 {
   margin: 0 0 10px;
   font-size: 1rem;
@@ -234,6 +238,14 @@ button:disabled {
 .status strong {
   display: block;
   margin-bottom: 4px;
+}
+
+.session-actions {
+  margin-top: 8px;
+}
+
+.session-actions button {
+  max-width: 180px;
 }
 
 .status-info {

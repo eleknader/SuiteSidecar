@@ -10,9 +10,9 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./taskpane.css?v=0.2.0" />
+    <link rel="stylesheet" href="./taskpane.css?v=0.2.1" />
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script defer src="./taskpane.js?v=0.2.0"></script>
+    <script defer src="./taskpane.js?v=0.2.1"></script>
   </head>
   <body>
     <div class="bg-shape bg-shape-a"></div>
@@ -23,7 +23,7 @@
         <p>Outlook / SuiteCRM -connector</p>
       </header>
 
-      <section class="card">
+      <section id="connectorCard" class="card">
         <h2>Connector</h2>
         <label for="connectorBaseUrl">Connector Base URL</label>
         <div class="row">
@@ -35,7 +35,7 @@
         <select id="profileSelect"></select>
       </section>
 
-      <section class="card">
+      <section id="loginCard" class="card">
         <h2>Login</h2>
         <label for="usernameInput">SuiteCRM Username</label>
         <input id="usernameInput" type="text" placeholder="admin" />
@@ -51,7 +51,7 @@
         <p id="sessionInfo" class="hint"></p>
       </section>
 
-      <section class="card">
+      <section id="selectedEmailCard" class="card">
         <h2>Selected Email</h2>
         <p class="hint">Use current Outlook item when available; otherwise fill manually.</p>
         <p class="hint">When running inside Outlook, item changes auto-refresh this context and trigger lookup if logged in.</p>
@@ -77,7 +77,7 @@
         <input id="sentAtInput" type="datetime-local" />
       </section>
 
-      <section class="card">
+      <section id="lookupCard" class="card">
         <h2>Lookup</h2>
         <div class="row">
           <button id="lookupBtn" type="button">Lookup by Sender Email</button>
@@ -91,7 +91,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section id="actionsCard" class="card">
         <h2>Actions</h2>
         <label for="firstNameInput">First Name</label>
         <input id="firstNameInput" type="text" placeholder="First name" />
@@ -141,6 +141,9 @@
         <strong>Status</strong>
         <p id="statusMessage">Ready.</p>
         <p id="statusRequestId" class="mono"></p>
+        <div id="sessionActionsRow" class="row wrap session-actions is-hidden">
+          <button id="statusLogoutBtn" type="button">Logout</button>
+        </div>
       </section>
     </main>
   </body>

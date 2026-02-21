@@ -50,6 +50,13 @@ function initElements() {
     'createContactBtn',
     'createLeadBtn',
     'logEmailBtn',
+    'connectorCard',
+    'loginCard',
+    'selectedEmailCard',
+    'lookupCard',
+    'actionsCard',
+    'sessionActionsRow',
+    'statusLogoutBtn',
     'statusBox',
     'statusMessage',
     'statusRequestId',
@@ -232,13 +239,36 @@ function clearSession(options = {}) {
   updateSessionInfo();
 }
 
+function hasAuthenticatedUiSession() {
+  return Boolean(state.token && !isTokenExpired() && activeProfileId());
+}
+
+function setVisible(element, visible) {
+  if (!element) {
+    return;
+  }
+  element.classList.toggle('is-hidden', !visible);
+}
+
+function refreshPanelVisibility() {
+  const authenticated = hasAuthenticatedUiSession();
+  setVisible(els.connectorCard, !authenticated);
+  setVisible(els.loginCard, !authenticated);
+  setVisible(els.selectedEmailCard, authenticated);
+  setVisible(els.lookupCard, authenticated);
+  setVisible(els.actionsCard, authenticated);
+  setVisible(els.sessionActionsRow, authenticated);
+}
+
 function updateSessionInfo() {
   if (!state.token) {
     els.sessionInfo.textContent = 'Not authenticated.';
+    refreshPanelVisibility();
     return;
   }
   const profileText = activeProfileId() || state.restoreProfileId || 'none';
   els.sessionInfo.textContent = `Authenticated. profile=${profileText} tokenExpiresAt=${state.tokenExpiresAt || 'unknown'}`;
+  refreshPanelVisibility();
 }
 
 function parseJsonSafe(text) {
@@ -333,6 +363,7 @@ function renderProfiles() {
   if (!els.profileSelect.value && state.profiles.length) {
     els.profileSelect.value = state.profiles[0].id;
   }
+  updateSessionInfo();
 }
 
 function splitName(displayName) {
@@ -1117,6 +1148,9 @@ function wireEvents() {
   els.logEmailBtn.addEventListener('click', logEmail);
   els.hydrateFromOutlookBtn.addEventListener('click', hydrateFromOutlook);
   els.usernameInput.addEventListener('change', persistSession);
+  if (els.statusLogoutBtn) {
+    els.statusLogoutBtn.addEventListener('click', logout);
+  }
 
   els.profileSelect.addEventListener('change', () => {
     if (state.token) {
