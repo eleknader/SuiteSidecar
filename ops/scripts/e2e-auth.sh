@@ -202,21 +202,25 @@ else
 fi
 
 # log email (first time expected 201)
-message_id="<smoke-${NOW_TS}@suitesidecar.local>"
-email_log_payload="$(printf '{"message":{"internetMessageId":"%s","subject":"Smoke log %s","from":{"email":"sender@example.com"},"to":[{"email":"%s"}],"sentAt":"2026-01-01T12:00:00Z"},"linkTo":{"module":"Contacts","id":"%s"}}' "${message_id}" "${NOW_TS}" "${contact_email}" "${contact_id}")"
-IFS='|' read -r code body headers < <(request "email-log-1" "POST" "/email/log?profileId=${PROFILE_ID}" "${email_log_payload}" "${TOKEN}")
-if [[ "${code}" == "201" ]]; then
-  mark_pass "POST /email/log?profileId=${PROFILE_ID} -> 201"
-else
-  mark_fail "POST /email/log?profileId=${PROFILE_ID} -> ${code}" "$body" "$headers"
-fi
+if [[ -n "${contact_id}" ]]; then
+  message_id="<smoke-${NOW_TS}@suitesidecar.local>"
+  email_log_payload="$(printf '{"message":{"internetMessageId":"%s","subject":"Smoke log %s","from":{"email":"sender@example.com"},"to":[{"email":"%s"}],"sentAt":"2026-01-01T12:00:00Z"},"linkTo":{"module":"Contacts","id":"%s"}}' "${message_id}" "${NOW_TS}" "${contact_email}" "${contact_id}")"
+  IFS='|' read -r code body headers < <(request "email-log-1" "POST" "/email/log?profileId=${PROFILE_ID}" "${email_log_payload}" "${TOKEN}")
+  if [[ "${code}" == "201" ]]; then
+    mark_pass "POST /email/log?profileId=${PROFILE_ID} -> 201"
+  else
+    mark_fail "POST /email/log?profileId=${PROFILE_ID} -> ${code}" "$body" "$headers"
+  fi
 
-# log email duplicate (expected 409)
-IFS='|' read -r code body headers < <(request "email-log-2" "POST" "/email/log?profileId=${PROFILE_ID}" "${email_log_payload}" "${TOKEN}")
-if [[ "${code}" == "409" ]]; then
-  mark_pass "POST /email/log duplicate -> 409"
+  # log email duplicate (expected 409)
+  IFS='|' read -r code body headers < <(request "email-log-2" "POST" "/email/log?profileId=${PROFILE_ID}" "${email_log_payload}" "${TOKEN}")
+  if [[ "${code}" == "409" ]]; then
+    mark_pass "POST /email/log duplicate -> 409"
+  else
+    mark_fail "POST /email/log duplicate -> ${code}" "$body" "$headers"
+  fi
 else
-  mark_fail "POST /email/log duplicate -> ${code}" "$body" "$headers"
+  echo "SKIP: /email/log checks skipped because contact creation did not return an id."
 fi
 
 echo "---"

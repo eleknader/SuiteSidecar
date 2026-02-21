@@ -72,7 +72,7 @@ final class V8Adapter implements CrmAdapterInterface
 
         $this->mergeCustomFields($attributes, $payload['customFields'] ?? null);
 
-        $response = $this->client->post('/Api/V8/module/Contacts', [
+        $response = $this->client->post('/Api/V8/module', [
             'data' => [
                 'type' => 'Contacts',
                 'attributes' => $attributes,
@@ -104,7 +104,7 @@ final class V8Adapter implements CrmAdapterInterface
 
         $this->mergeCustomFields($attributes, $payload['customFields'] ?? null);
 
-        $response = $this->client->post('/Api/V8/module/Leads', [
+        $response = $this->client->post('/Api/V8/module', [
             'data' => [
                 'type' => 'Leads',
                 'attributes' => $attributes,
@@ -147,7 +147,7 @@ final class V8Adapter implements CrmAdapterInterface
             $attributes['description'] = $bodyText;
         }
 
-        $response = $this->client->post('/Api/V8/module/Notes', [
+        $response = $this->client->post('/Api/V8/module', [
             'data' => [
                 'type' => 'Notes',
                 'attributes' => $attributes,
