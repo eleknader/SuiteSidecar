@@ -226,3 +226,9 @@ curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
   -X POST "https://${HOSTNAME}/auth/logout" \
   -H "Authorization: Bearer ${TOKEN}"
 ```
+
+## SuiteCRM Dedup Prerequisites
+
+For SuiteCRM-side dedup field requirements and DEV QRR/cache refresh steps, see:
+
+- `docs/REQUIREMENTS.md`
