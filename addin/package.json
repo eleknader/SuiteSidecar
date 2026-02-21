@@ -4,6 +4,8 @@
   "private": true,
   "description": "SuiteSidecar Outlook add-in vertical-slice scaffold",
   "scripts": {
-    "serve": "python3 -m http.server 3000 -d public"
+    "serve": "python3 -m http.server 3000 -d public",
+    "package": "bash ../ops/scripts/package-addin.sh",
+    "publish": "bash ../ops/scripts/publish-addin.sh"
   }
 }

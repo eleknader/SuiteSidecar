@@ -351,3 +351,49 @@ curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
 For SuiteCRM-side dedup field requirements and DEV QRR/cache refresh steps, see:
 
 - `docs/REQUIREMENTS.md`
+
+## Outlook add-in packaging (repeatable)
+
+Run from repo root:
+
+```bash
+bash ops/scripts/package-addin.sh
+bash ops/scripts/publish-addin.sh
+```
+
+If successful, artifacts are created under `dist/addin/`:
+
+- `dist/addin/stage/sideload/suitesidecar.xml`
+- `dist/addin/stage/static/addin/`
+- `dist/addin/suitesidecar-manifest.zip` (or `.tar.gz`)
+- `dist/addin/suitesidecar-static.zip` (or `.tar.gz`)
+
+The script fails if the manifest still contains placeholder URLs.
+`publish-addin.sh` also deploys files into `connector-php/public/addin/`.
+
+## Outlook sideload (OWA/Desktop)
+
+Prerequisites:
+
+1. `https://suitesidecar.example.com/addin/taskpane.html` is reachable from the Outlook client.
+2. Connector API is reachable at `https://suitesidecar.example.com`.
+3. `dist/addin/stage/sideload/suitesidecar.xml` exists.
+4. Add-in static files are published under `connector-php/public/addin/`.
+
+Sideload using Outlook on the web:
+
+1. Open Outlook on the web with the target mailbox.
+2. Go to `Get Add-ins` -> `My add-ins`.
+3. Select `Add a custom add-in` -> `Add from file`.
+4. Upload `dist/addin/stage/sideload/suitesidecar.xml`.
+5. Open any email in read mode and launch `SuiteSidecar` from the ribbon.
+
+Validation after sideload:
+
+1. Click `Load Profiles`.
+2. Login with SuiteCRM user credentials.
+3. Trigger lookup with a known sender email.
+4. Test `Create Contact`, `Create Lead`, and `Log Email`.
+5. For failures, capture `requestId` shown in the add-in status box.
+
+For requestId-based incident handling, see `docs/SUPPORT.md`.

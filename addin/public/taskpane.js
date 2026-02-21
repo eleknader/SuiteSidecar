@@ -636,7 +636,7 @@ function init() {
   updateSessionInfo();
 
   if (!els.connectorBaseUrl.value) {
-    els.connectorBaseUrl.value = 'https://connector.example.com';
+    els.connectorBaseUrl.value = 'https://suitesidecar.example.com';
   }
 
   setStatus('info', 'Ready. Load profiles, login, then run lookup/actions.');

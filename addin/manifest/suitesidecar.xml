@@ -5,18 +5,17 @@
            xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
            xsi:type="MailApp">
   <Id>f5de4b31-6f9c-4fd8-a3aa-a80172dc5f9f</Id>
-  <Version>0.1.0.0</Version>
+  <Version>0.1.1.0</Version>
   <ProviderName>SuiteSidecar</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="SuiteSidecar"/>
   <Description DefaultValue="SuiteCRM sidecar connector for Outlook."/>
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon-64.png"/>
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-128.png"/>
-  <SupportUrl DefaultValue="https://example.com/support"/>
+  <IconUrl DefaultValue="https://suitesidecar.example.com/addin/assets/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://suitesidecar.example.com/addin/assets/icon-128.png"/>
+  <SupportUrl DefaultValue="https://suitesidecar.example.com/"/>
 
   <AppDomains>
-    <AppDomain>https://localhost:3000</AppDomain>
-    <AppDomain>https://connector.example.com</AppDomain>
+    <AppDomain>https://suitesidecar.example.com</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -32,7 +31,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://localhost:3000/taskpane.html"/>
+        <SourceLocation DefaultValue="https://suitesidecar.example.com/addin/taskpane.html"/>
         <RequestedHeight>450</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -86,12 +85,12 @@
       </Hosts>
       <Resources>
         <bt:Images>
-          <bt:Image id="Icon.16" DefaultValue="https://localhost:3000/assets/icon-16.png"/>
-          <bt:Image id="Icon.32" DefaultValue="https://localhost:3000/assets/icon-32.png"/>
-          <bt:Image id="Icon.80" DefaultValue="https://localhost:3000/assets/icon-80.png"/>
+          <bt:Image id="Icon.16" DefaultValue="https://suitesidecar.example.com/addin/assets/icon-16.png"/>
+          <bt:Image id="Icon.32" DefaultValue="https://suitesidecar.example.com/addin/assets/icon-32.png"/>
+          <bt:Image id="Icon.80" DefaultValue="https://suitesidecar.example.com/addin/assets/icon-80.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html"/>
+          <bt:Url id="Taskpane.Url" DefaultValue="https://suitesidecar.example.com/addin/taskpane.html"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="Group.Label" DefaultValue="SuiteSidecar"/>

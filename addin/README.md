@@ -1,31 +1,68 @@
-# SuiteSidecar Add-in Scaffold
+# SuiteSidecar Add-in
 
-This folder contains a vertical-slice scaffold for the Outlook task pane.
+This folder contains the Outlook taskpane MVP vertical slice.
 
-## Scope in this scaffold
+## Implemented flow
 
-- Load connector profiles (`GET /profiles`)
-- Login (`POST /auth/login`)
-- Lookup sender (`GET /lookup/by-email`)
-- Create Contact (`POST /entities/contacts`)
-- Create Lead (`POST /entities/leads`)
-- Log Email (`POST /email/log`)
-- Render requestId-aware error/status messages
-- Register `Office.EventType.ItemChanged` and auto-run lookup on item switch (when logged in)
+- Load profiles from connector: `GET /profiles`
+- Login: `POST /auth/login`
+- Lookup sender: `GET /lookup/by-email`
+- Create Contact: `POST /entities/contacts`
+- Create Lead: `POST /entities/leads`
+- Log Email (SuiteCRM Notes): `POST /email/log`
+- Show requestId in UI errors for support
+- Auto-lookup on item change via `Office.EventType.ItemChanged` (after login)
 
-## Run local static host
+## Configured production endpoint
+
+- Add-in host URL: `https://suitesidecar.example.com`
+- Manifest file: `addin/manifest/suitesidecar.xml`
+- Taskpane URL in manifest: `https://suitesidecar.example.com/addin/taskpane.html`
+
+## Local static preview (browser only)
 
 ```bash
 cd addin
 npm run serve
 ```
 
-Open:
+Open `http://localhost:3000/taskpane.html`.
+This preview is useful for UI checks, but Outlook host APIs require sideloading.
 
-- `http://localhost:3000/taskpane.html`
+## Build release artifacts
 
-## Notes
+Run from repo root:
 
-- `manifest/suitesidecar.xml` is a starter manifest and uses localhost placeholder URLs.
-- Update manifest URLs and icon assets before sideloading in Outlook.
-- For Office runtime testing, sideload the manifest into a mailbox-enabled Outlook host.
+```bash
+bash ops/scripts/package-addin.sh
+bash ops/scripts/publish-addin.sh
+```
+
+Output:
+
+- `dist/addin/stage/sideload/suitesidecar.xml`
+- `dist/addin/stage/static/addin/`
+- `dist/addin/suitesidecar-manifest.zip` (or `.tar.gz`)
+- `dist/addin/suitesidecar-static.zip` (or `.tar.gz`)
+
+Published web files:
+
+- `connector-php/public/addin/*`
+- `connector-php/public/addin/manifest/suitesidecar.xml`
+
+## Install to Outlook (sideload)
+
+1. Publish add-in assets with `bash ops/scripts/publish-addin.sh`.
+2. Ensure `https://suitesidecar.example.com/addin/taskpane.html` is reachable from the Outlook client.
+3. In Outlook on the web:
+   - `Get Add-ins` -> `My add-ins` -> `Add a custom add-in` -> `Add from file`.
+   - Upload `dist/addin/stage/sideload/suitesidecar.xml`.
+4. Open an email in read mode and launch SuiteSidecar from the ribbon.
+5. Load profiles, login, then run lookup/create/log actions.
+
+## Validation checklist
+
+1. `GET /profiles` returns at least one profile.
+2. `POST /auth/login` returns connector JWT.
+3. Lookup works for both found and not-found emails.
+4. `Create Contact`, `Create Lead`, and `Log Email` return success or structured errors with `requestId`.
