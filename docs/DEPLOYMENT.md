@@ -117,6 +117,9 @@ curl -sS -X POST "${BASE_URL}/email/log?profileId=example-dev" \
   }'
 ```
 
+For `suitecrm_v8_jsonapi` profiles, the connector creates a SuiteCRM `Notes` record and links it to `linkTo`.
+If SuiteCRM is unreachable, the connector returns a structured error response.
+
 ## How to test before DNS propagation
 
 Use `--resolve` to force hostname + TLS SNI to this server IP:

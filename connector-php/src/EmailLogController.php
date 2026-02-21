@@ -5,13 +5,22 @@ declare(strict_types=1);
 namespace SuiteSidecar;
 
 use SuiteSidecar\Http\Response;
-use SuiteSidecar\SuiteCrm\Profile;
+use SuiteSidecar\SuiteCrm\CrmAdapterInterface;
+use SuiteSidecar\SuiteCrm\SuiteCrmAuthException;
+use SuiteSidecar\SuiteCrm\SuiteCrmBadResponseException;
+use SuiteSidecar\SuiteCrm\SuiteCrmException;
+use SuiteSidecar\SuiteCrm\SuiteCrmHttpException;
 
 final class EmailLogController
 {
     private const ALLOWED_LINK_MODULES = ['Contacts', 'Leads', 'Accounts', 'Opportunities', 'Cases'];
 
-    public function log(Profile $profile): void
+    public function __construct(
+        private readonly CrmAdapterInterface $adapter
+    ) {
+    }
+
+    public function log(): void
     {
         $payload = $this->readJsonBody();
         if ($payload === null) {
@@ -73,26 +82,59 @@ final class EmailLogController
             return;
         }
 
-        $recordId = bin2hex(random_bytes(16));
-        $displayName = substr($subject, 0, 180);
+        $options = isset($payload['options']) && is_array($payload['options']) ? $payload['options'] : [];
 
-        error_log(
-            '[requestId=' . Response::requestId() . '] Email log accepted'
-            . ' profileId=' . $profile->id
-            . ' linkModule=' . $module
-            . ' linkId=' . $linkId
-            . ' messageId=' . $internetMessageId
-        );
+        try {
+            $result = $this->adapter->logEmail([
+                'message' => [
+                    'internetMessageId' => $internetMessageId,
+                    'subject' => $subject,
+                    'from' => $from,
+                    'to' => $to,
+                    'cc' => isset($message['cc']) && is_array($message['cc']) ? $message['cc'] : [],
+                    'sentAt' => $sentAt,
+                    'receivedAt' => isset($message['receivedAt']) ? (string) $message['receivedAt'] : null,
+                    'bodyText' => isset($message['bodyText']) ? (string) $message['bodyText'] : null,
+                    'bodyHtml' => isset($message['bodyHtml']) ? (string) $message['bodyHtml'] : null,
+                    'attachments' => isset($message['attachments']) && is_array($message['attachments']) ? $message['attachments'] : [],
+                ],
+                'linkTo' => [
+                    'module' => $module,
+                    'id' => $linkId,
+                ],
+                'options' => [
+                    'storeBody' => (bool) ($options['storeBody'] ?? false),
+                    'storeAttachments' => (bool) ($options['storeAttachments'] ?? false),
+                    'maxAttachmentBytes' => isset($options['maxAttachmentBytes']) ? (int) $options['maxAttachmentBytes'] : null,
+                ],
+            ]);
 
-        Response::json([
-            'loggedRecord' => [
-                'module' => 'Emails',
-                'id' => $recordId,
-                'displayName' => $displayName,
-                'link' => $profile->deepLink('Emails', $recordId),
-            ],
-            'deduplicated' => false,
-        ], 201);
+            Response::json($result, 201);
+        } catch (SuiteCrmAuthException $e) {
+            error_log('[requestId=' . Response::requestId() . '] SuiteCRM auth failed during email log');
+            $statusCode = $e->getStatusCode();
+            if (!in_array($statusCode, [401, 502], true)) {
+                $statusCode = 401;
+            }
+            Response::error('suitecrm_auth_failed', 'SuiteCRM authentication failed', $statusCode);
+        } catch (SuiteCrmBadResponseException) {
+            error_log('[requestId=' . Response::requestId() . '] SuiteCRM returned invalid response payload for email log');
+            Response::error('suitecrm_bad_response', 'SuiteCRM returned an invalid response', 502);
+        } catch (SuiteCrmHttpException $e) {
+            error_log(
+                '[requestId=' . Response::requestId() . '] SuiteCRM HTTP error'
+                . ' endpoint=' . $e->getEndpoint()
+                . ' status=' . $e->getStatus()
+            );
+            if (in_array($e->getStatus(), [401, 403], true)) {
+                Response::error('suitecrm_auth_failed', 'SuiteCRM authentication failed', 401);
+                return;
+            }
+            Response::error('suitecrm_unreachable', 'SuiteCRM is temporarily unreachable', 502);
+        } catch (SuiteCrmException) {
+            error_log('[requestId=' . Response::requestId() . '] SuiteCRM request failed during email log');
+            Response::error('suitecrm_unreachable', 'SuiteCRM is temporarily unreachable', 502);
+        }
     }
 
     private function readJsonBody(): ?array

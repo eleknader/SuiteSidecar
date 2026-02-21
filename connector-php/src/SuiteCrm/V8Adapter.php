@@ -50,6 +50,61 @@ final class V8Adapter implements CrmAdapterInterface
         return $payload;
     }
 
+    public function logEmail(array $payload): array
+    {
+        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : [];
+        $linkTo = isset($payload['linkTo']) && is_array($payload['linkTo']) ? $payload['linkTo'] : [];
+        $options = isset($payload['options']) && is_array($payload['options']) ? $payload['options'] : [];
+
+        $subject = trim((string) ($message['subject'] ?? 'Email log'));
+        if ($subject === '') {
+            $subject = 'Email log';
+        }
+
+        $storeBody = (bool) ($options['storeBody'] ?? false);
+        $description = $this->buildDescription($message, $storeBody);
+        $parentType = trim((string) ($linkTo['module'] ?? ''));
+        $parentId = trim((string) ($linkTo['id'] ?? ''));
+
+        $response = $this->client->post('/Api/V8/module/Notes', [
+            'data' => [
+                'type' => 'Notes',
+                'attributes' => [
+                    'name' => substr($subject, 0, 255),
+                    'description' => $description,
+                    'parent_type' => $parentType,
+                    'parent_id' => $parentId,
+                ],
+            ],
+        ]);
+
+        $item = $response['data'] ?? null;
+        if (!is_array($item)) {
+            throw new SuiteCrmBadResponseException('SuiteCRM response is missing created note payload');
+        }
+
+        $id = isset($item['id']) ? (string) $item['id'] : '';
+        if ($id === '') {
+            throw new SuiteCrmBadResponseException('SuiteCRM response is missing created note id');
+        }
+
+        $attributes = $item['attributes'] ?? [];
+        $displayName = $subject;
+        if (is_array($attributes) && isset($attributes['name']) && trim((string) $attributes['name']) !== '') {
+            $displayName = (string) $attributes['name'];
+        }
+
+        return [
+            'loggedRecord' => [
+                'module' => 'Notes',
+                'id' => $id,
+                'displayName' => substr($displayName, 0, 255),
+                'link' => $this->profile->deepLink('Notes', $id),
+            ],
+            'deduplicated' => false,
+        ];
+    }
+
     private function queryFirstPerson(string $module, string $email): ?array
     {
         $response = $this->client->get('/Api/V8/module/' . $module, [
@@ -167,5 +222,68 @@ final class V8Adapter implements CrmAdapterInterface
             'website' => isset($attributes['website']) ? (string) $attributes['website'] : null,
             'link' => $this->profile->deepLink('Accounts', $id),
         ];
+    }
+
+    private function buildDescription(array $message, bool $storeBody): string
+    {
+        $lines = [];
+        $lines[] = 'Logged by SuiteSidecar Connector';
+
+        $internetMessageId = trim((string) ($message['internetMessageId'] ?? ''));
+        if ($internetMessageId !== '') {
+            $lines[] = 'Message-ID: ' . $internetMessageId;
+        }
+
+        $from = isset($message['from']) && is_array($message['from']) ? $message['from'] : [];
+        $fromEmail = trim((string) ($from['email'] ?? ''));
+        if ($fromEmail !== '') {
+            $lines[] = 'From: ' . $fromEmail;
+        }
+
+        $toAddresses = $this->collectEmails($message['to'] ?? []);
+        if ($toAddresses !== '') {
+            $lines[] = 'To: ' . $toAddresses;
+        }
+
+        $ccAddresses = $this->collectEmails($message['cc'] ?? []);
+        if ($ccAddresses !== '') {
+            $lines[] = 'Cc: ' . $ccAddresses;
+        }
+
+        $sentAt = trim((string) ($message['sentAt'] ?? ''));
+        if ($sentAt !== '') {
+            $lines[] = 'Sent: ' . $sentAt;
+        }
+
+        if ($storeBody) {
+            $bodyText = trim((string) ($message['bodyText'] ?? ''));
+            if ($bodyText !== '') {
+                $lines[] = '';
+                $lines[] = 'Body:';
+                $lines[] = $bodyText;
+            }
+        }
+
+        return substr(implode("\n", $lines), 0, 10000);
+    }
+
+    private function collectEmails(mixed $parties): string
+    {
+        if (!is_array($parties)) {
+            return '';
+        }
+
+        $emails = [];
+        foreach ($parties as $party) {
+            if (!is_array($party)) {
+                continue;
+            }
+            $email = trim((string) ($party['email'] ?? ''));
+            if ($email !== '') {
+                $emails[] = $email;
+            }
+        }
+
+        return implode(', ', $emails);
     }
 }

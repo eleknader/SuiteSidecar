@@ -15,6 +15,7 @@ use SuiteSidecar\ProfileController;
 use SuiteSidecar\ProfileRegistry;
 use SuiteSidecar\ProfileResolutionException;
 use SuiteSidecar\ProfileResolver;
+use SuiteSidecar\SuiteCrm\CrmAdapterInterface;
 use SuiteSidecar\SuiteCrm\MockAdapter;
 use SuiteSidecar\SuiteCrm\OAuthTokenProvider;
 use SuiteSidecar\SuiteCrm\SessionAccessTokenProvider;
@@ -94,6 +95,22 @@ try {
     $router = new Router();
     $systemController = new SystemController();
     $profileController = new ProfileController($profileRegistry->all());
+    $buildAdapterForSession = static function (\SuiteSidecar\SuiteCrm\Profile $profile, array $session): CrmAdapterInterface {
+        if ($profile->apiFlavor === 'suitecrm_v8_jsonapi') {
+            $tokenProvider = new SessionAccessTokenProvider($session, Response::requestId());
+            return new V8Adapter(
+                $profile,
+                new V8Client(
+                    $profile->suitecrmBaseUrl,
+                    $tokenProvider,
+                    $profile,
+                    Response::requestId()
+                )
+            );
+        }
+
+        return new MockAdapter();
+    };
 
     $router->get('/health', [$systemController, 'health']);
     $router->get('/version', [$systemController, 'version']);
@@ -122,7 +139,8 @@ try {
         $buildJwtService,
         $readHeaders,
         $sessionStore,
-        $profileResolver
+        $profileResolver,
+        $buildAdapterForSession
     ): void {
         $jwtService = $buildJwtService();
         if ($jwtService === null) {
@@ -138,7 +156,7 @@ try {
                 return;
             }
 
-            $profile = $profileResolver->resolveForLookup($_GET, $headers);
+            $profile = $profileResolver->resolve($_GET, $headers);
 
             $session = isset($authContext['session']) && is_array($authContext['session']) ? $authContext['session'] : [];
             $sessionProfileId = isset($session['profileId']) ? (string) $session['profileId'] : '';
@@ -147,20 +165,7 @@ try {
                 return;
             }
 
-            if ($profile->apiFlavor === 'suitecrm_v8_jsonapi') {
-                $tokenProvider = new SessionAccessTokenProvider($session, Response::requestId());
-                $adapter = new V8Adapter(
-                    $profile,
-                    new V8Client(
-                        $profile->suitecrmBaseUrl,
-                        $tokenProvider,
-                        $profile,
-                        Response::requestId()
-                    )
-                );
-            } else {
-                $adapter = new MockAdapter();
-            }
+            $adapter = $buildAdapterForSession($profile, $session);
 
             $lookupController = new LookupController($adapter);
             $lookupController->byEmail();
@@ -175,7 +180,8 @@ try {
         $buildJwtService,
         $readHeaders,
         $sessionStore,
-        $profileResolver
+        $profileResolver,
+        $buildAdapterForSession
     ): void {
         $jwtService = $buildJwtService();
         if ($jwtService === null) {
@@ -199,15 +205,13 @@ try {
                 return;
             }
 
-            $emailLogController = new EmailLogController();
-            $emailLogController->log($profile);
+            $adapter = $buildAdapterForSession($profile, $session);
+            $emailLogController = new EmailLogController($adapter);
+            $emailLogController->log();
         } catch (ProfileResolutionException $e) {
             Response::error('bad_request', $e->getMessage(), 400);
         } catch (AuthException $e) {
             error_log('[requestId=' . Response::requestId() . '] Email log auth setup failed: ' . $e->getMessage());
-            Response::error('server_error', 'Internal server error', 500);
-        } catch (\Throwable $e) {
-            error_log('[requestId=' . Response::requestId() . '] Email log handler failed: ' . $e->getMessage());
             Response::error('server_error', 'Internal server error', 500);
         }
     });

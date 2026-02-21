@@ -7,4 +7,6 @@ namespace SuiteSidecar\SuiteCrm;
 interface CrmAdapterInterface
 {
     public function lookupByEmail(string $email, array $include): array;
+
+    public function logEmail(array $payload): array;
 }

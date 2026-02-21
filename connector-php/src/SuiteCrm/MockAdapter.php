@@ -94,4 +94,25 @@ final class MockAdapter implements CrmAdapterInterface
 
         return $payload;
     }
+
+    public function logEmail(array $payload): array
+    {
+        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : [];
+        $subject = isset($message['subject']) ? trim((string) $message['subject']) : 'Email log';
+        if ($subject === '') {
+            $subject = 'Email log';
+        }
+
+        $recordId = 'mock-note-' . bin2hex(random_bytes(6));
+
+        return [
+            'loggedRecord' => [
+                'module' => 'Notes',
+                'id' => $recordId,
+                'displayName' => substr($subject, 0, 180),
+                'link' => 'https://crm.example.com/#Notes/' . $recordId,
+            ],
+            'deduplicated' => false,
+        ];
+    }
 }

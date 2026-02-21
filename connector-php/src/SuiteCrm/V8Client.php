@@ -22,6 +22,16 @@ final class V8Client
 
     public function get(string $path, array $query = []): array
     {
+        return $this->request('GET', $path, $query);
+    }
+
+    public function post(string $path, array $jsonBody): array
+    {
+        return $this->request('POST', $path, [], $jsonBody);
+    }
+
+    private function request(string $method, string $path, array $query = [], ?array $jsonBody = null): array
+    {
         $token = $this->tokenProvider->getAccessToken($this->profile);
 
         $url = $this->baseUrl . '/' . ltrim($path, '/');
@@ -34,16 +44,32 @@ final class V8Client
             throw new SuiteCrmHttpException('Failed to initialize SuiteCRM request', 0, '', $path);
         }
 
-        curl_setopt_array($ch, [
+        $headers = [
+            'Authorization: Bearer ' . $token,
+            'Accept: application/vnd.api+json',
+            'User-Agent: suitesidecar-connector-php/0.1.0',
+        ];
+
+        $options = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 15,
-            CURLOPT_HTTPHEADER => [
-                'Authorization: Bearer ' . $token,
-                'Accept: application/vnd.api+json',
-                'User-Agent: suitesidecar-connector-php/0.1.0',
-            ],
-        ]);
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_CUSTOMREQUEST => $method,
+        ];
+
+        if ($jsonBody !== null) {
+            $encodedBody = json_encode($jsonBody, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if ($encodedBody === false) {
+                curl_close($ch);
+                throw new SuiteCrmBadResponseException('Failed to encode SuiteCRM request body');
+            }
+            $headers[] = 'Content-Type: application/vnd.api+json';
+            $options[CURLOPT_HTTPHEADER] = $headers;
+            $options[CURLOPT_POSTFIELDS] = $encodedBody;
+        }
+
+        curl_setopt_array($ch, $options);
 
         $rawResponse = curl_exec($ch);
         if ($rawResponse === false) {
