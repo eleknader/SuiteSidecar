@@ -124,8 +124,8 @@ final class V8Adapter implements CrmAdapterInterface
             throw new SuiteCrmBadResponseException('Missing message.internetMessageId for email logging');
         }
 
-        $dedupeKey = $this->buildMessageDedupeKey($internetMessageId);
-        $existingRecord = $this->findExistingLoggedEmail($dedupeKey);
+        $messageKey = $this->buildMessageKey($internetMessageId);
+        $existingRecord = $this->findExistingLoggedEmail($messageKey);
         if ($existingRecord !== null) {
             throw new SuiteCrmConflictException('Email has already been logged', $existingRecord);
         }
@@ -136,8 +136,8 @@ final class V8Adapter implements CrmAdapterInterface
 
         $attributes = [
             'name' => substr($subject !== '' ? $subject : 'Email from Outlook', 0, 255),
-            'external_message_id_c' => $dedupeKey,
-            'suitesidecar_source_c' => 'suitesidecar',
+            'suitesidecar_message_id_c' => $messageKey,
+            'suitesidecar_profile_id_c' => $this->profile->id,
             'parent_type' => $linkModule,
             'parent_id' => $linkId,
         ];
@@ -181,12 +181,12 @@ final class V8Adapter implements CrmAdapterInterface
         return $firstItem;
     }
 
-    private function findExistingLoggedEmail(string $dedupeKey): ?array
+    private function findExistingLoggedEmail(string $messageKey): ?array
     {
         $response = $this->client->get('/Api/V8/module/Notes', [
-            'filter[external_message_id_c][eq]' => $dedupeKey,
-            'page[size]' => 1,
-            'fields[Notes]' => 'name,external_message_id_c',
+            'filter[suitesidecar_message_id_c][eq]' => $messageKey,
+            'page[size]' => 5,
+            'fields[Notes]' => 'name,suitesidecar_message_id_c,suitesidecar_profile_id_c',
         ]);
 
         $data = $response['data'] ?? null;
@@ -194,32 +194,42 @@ final class V8Adapter implements CrmAdapterInterface
             return null;
         }
 
-        $firstItem = $data[0] ?? null;
-        if (!is_array($firstItem)) {
-            throw new SuiteCrmBadResponseException('SuiteCRM response is missing item data');
+        foreach ($data as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $id = isset($item['id']) ? (string) $item['id'] : '';
+            if ($id === '') {
+                continue;
+            }
+
+            $attributes = $item['attributes'] ?? [];
+            if (!is_array($attributes)) {
+                continue;
+            }
+
+            $itemProfileId = trim((string) ($attributes['suitesidecar_profile_id_c'] ?? ''));
+            if ($itemProfileId !== '' && $itemProfileId !== $this->profile->id) {
+                continue;
+            }
+
+            $name = trim((string) ($attributes['name'] ?? ''));
+            return [
+                'module' => 'Notes',
+                'id' => $id,
+                'displayName' => $name !== '' ? $name : 'Email from Outlook',
+                'link' => $this->profile->deepLink('Notes', $id),
+            ];
         }
 
-        $id = isset($firstItem['id']) ? (string) $firstItem['id'] : '';
-        if ($id === '') {
-            throw new SuiteCrmBadResponseException('SuiteCRM response item missing id');
-        }
-
-        $attributes = $firstItem['attributes'] ?? [];
-        $name = is_array($attributes) ? trim((string) ($attributes['name'] ?? '')) : '';
-
-        return [
-            'module' => 'Notes',
-            'id' => $id,
-            'displayName' => $name !== '' ? $name : 'Email from Outlook',
-            'link' => $this->profile->deepLink('Notes', $id),
-        ];
+        return null;
     }
 
-    private function buildMessageDedupeKey(string $internetMessageId): string
+    private function buildMessageKey(string $internetMessageId): string
     {
         $normalizedMessageId = preg_replace('/\s+/', '', strtolower(trim($internetMessageId)));
-        $key = $this->profile->id . '|' . (string) $normalizedMessageId;
-        return substr($key, 0, 255);
+        return substr((string) $normalizedMessageId, 0, 191);
     }
 
     private function mapPerson(array $item, string $module, string $emailFallback): array

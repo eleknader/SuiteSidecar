@@ -399,12 +399,12 @@ For each logged email, the connector will create a Note record with:
 | description | Plain text body (optional) | Policy-controlled |
 | created_by | SuiteCRM user | From OAuth context |
 | assigned_user_id | SuiteCRM user | From OAuth context |
-| external_message_id (custom field) | internetMessageId | Used for deduplication |
-| suitesidecar_source (custom field) | "suitesidecar" | Audit marker |
+| suitesidecar_message_id_c (custom field) | internetMessageId | Used for deduplication |
+| suitesidecar_profile_id_c (custom field) | profileId | Scopes deduplication per connector profile |
 
 Custom fields required (created during connector installation if missing):
-- `external_message_id_c` (varchar, indexed)
-- `suitesidecar_source_c` (varchar)
+- `suitesidecar_message_id_c` (varchar, indexed)
+- `suitesidecar_profile_id_c` (varchar, indexed)
 
 ---
 
@@ -443,7 +443,9 @@ Duplicate prevention is critical because:
 Primary key (implemented now):
 
 - `profileId + internetMessageId`
-- Persisted in `external_message_id_c` as a normalized combined value.
+- Persisted in:
+  - `suitesidecar_message_id_c`
+  - `suitesidecar_profile_id_c`
 
 Connector logic:
 
@@ -549,7 +551,7 @@ emailLoggingStrategy: notes | emails
 
 ### 14.9 Operational Considerations
 
-external_message_id_c must be indexed for performance.
+suitesidecar_message_id_c must be indexed for performance.
 
 Connector must log:
 
@@ -565,13 +567,13 @@ All log operations must emit a correlation requestId.
 
 The connector installer or setup script must ensure:
 
-external_message_id_c exists in Notes
+suitesidecar_message_id_c exists in Notes
 
 Field is indexed
 
 Field length >= 255
 
-suitesidecar_source_c exists (optional but recommended)
+suitesidecar_profile_id_c exists in Notes
 
 If missing:
 
@@ -582,7 +584,7 @@ Or provide CLI script to create them
 ## 16. Summary of Email Logging Design
 Aspect	Decision
 Module	Notes (MVP)
-Dedup key	profileId + internetMessageId (stored in external_message_id_c)
+Dedup key	profileId + internetMessageId (stored in suitesidecar_message_id_c + suitesidecar_profile_id_c)
 Attachments	Not in v0.1
 Relationships	parent_type + parent_id on Note
 Body storage	Policy-controlled
