@@ -6,6 +6,8 @@ const state = {
   profiles: [],
   lastLookup: null,
   officeReady: false,
+  itemChangedHandlerRegistered: false,
+  autoLookupTimer: null,
 };
 
 const els = {};
@@ -311,16 +313,22 @@ function buildLookupEmail() {
   return sender;
 }
 
-async function runLookup() {
+async function runLookup(options = {}) {
+  const suppressStatus = options.suppressStatus === true;
+
   if (!state.token) {
-    setStatus('warning', 'Login is required before lookup.');
-    return;
+    if (!suppressStatus) {
+      setStatus('warning', 'Login is required before lookup.');
+    }
+    return null;
   }
 
   const email = buildLookupEmail();
   if (!email) {
-    setStatus('warning', 'Sender email is required for lookup.');
-    return;
+    if (!suppressStatus) {
+      setStatus('warning', 'Sender email is required for lookup.');
+    }
+    return null;
   }
 
   try {
@@ -348,9 +356,15 @@ async function runLookup() {
       }
     }
 
-    setStatus('success', 'Lookup completed.', result.requestId || '');
+    if (!suppressStatus) {
+      setStatus('success', 'Lookup completed.', result.requestId || '');
+    }
+    return result;
   } catch (error) {
-    setStatus('error', `Lookup failed: ${error.message}`, error.requestId || '');
+    if (!suppressStatus) {
+      setStatus('error', `Lookup failed: ${error.message}`, error.requestId || '');
+    }
+    return null;
   }
 }
 
@@ -499,7 +513,9 @@ async function readOutlookContext() {
   };
 }
 
-async function hydrateFromOutlook() {
+async function hydrateFromOutlook(options = {}) {
+  const suppressStatus = options.suppressStatus === true;
+
   try {
     const context = await readOutlookContext();
 
@@ -519,10 +535,81 @@ async function hydrateFromOutlook() {
       }
     }
 
-    setStatus('success', 'Loaded selected email context from Outlook.');
+    if (!suppressStatus) {
+      setStatus('success', 'Loaded selected email context from Outlook.');
+    }
+    return context;
   } catch (error) {
-    setStatus('warning', `Outlook context unavailable: ${error.message}`);
+    if (!suppressStatus) {
+      setStatus('warning', `Outlook context unavailable: ${error.message}`);
+    }
+    return null;
   }
+}
+
+async function tryAutoLookup(trigger) {
+  const context = await hydrateFromOutlook({ suppressStatus: true });
+  if (!context) {
+    return;
+  }
+
+  if (!state.token) {
+    setStatus('info', `Outlook item changed (${trigger}). Login to enable automatic lookup.`);
+    return;
+  }
+
+  if (!activeProfileId()) {
+    setStatus('warning', `Outlook item changed (${trigger}) but no profile is selected.`);
+    return;
+  }
+
+  const result = await runLookup({ suppressStatus: true });
+  if (result) {
+    setStatus('success', `Automatic lookup completed (${trigger}).`, result.requestId || '');
+  }
+}
+
+function scheduleAutoLookup(trigger) {
+  if (state.autoLookupTimer !== null) {
+    clearTimeout(state.autoLookupTimer);
+  }
+
+  state.autoLookupTimer = setTimeout(() => {
+    state.autoLookupTimer = null;
+    tryAutoLookup(trigger);
+  }, 350);
+}
+
+function registerItemChangedHandler() {
+  if (!(window.Office && Office.context && Office.context.mailbox)) {
+    return;
+  }
+
+  if (state.itemChangedHandlerRegistered) {
+    return;
+  }
+
+  if (typeof Office.context.mailbox.addHandlerAsync !== 'function') {
+    setStatus('warning', 'Office runtime does not support ItemChanged handlers in this host.');
+    return;
+  }
+
+  Office.context.mailbox.addHandlerAsync(Office.EventType.ItemChanged, () => {
+    scheduleAutoLookup('item_changed');
+  }, (result) => {
+    if (result && result.status === Office.AsyncResultStatus.Succeeded) {
+      state.itemChangedHandlerRegistered = true;
+      setStatus('info', 'ItemChanged handler registered. Automatic lookup is ready.');
+      scheduleAutoLookup('initial');
+      return;
+    }
+
+    const errorMessage =
+      result && result.error && result.error.message
+        ? result.error.message
+        : 'unknown registration failure';
+    setStatus('warning', `ItemChanged handler registration failed: ${errorMessage}`);
+  });
 }
 
 function wireEvents() {
@@ -558,6 +645,7 @@ function init() {
     Office.onReady(() => {
       state.officeReady = true;
       setStatus('info', 'Office runtime detected. You can use selected email context.');
+      registerItemChangedHandler();
     });
   }
 }

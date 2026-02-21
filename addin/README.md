@@ -11,6 +11,7 @@ This folder contains a vertical-slice scaffold for the Outlook task pane.
 - Create Lead (`POST /entities/leads`)
 - Log Email (`POST /email/log`)
 - Render requestId-aware error/status messages
+- Register `Office.EventType.ItemChanged` and auto-run lookup on item switch (when logged in)
 
 ## Run local static host
 
