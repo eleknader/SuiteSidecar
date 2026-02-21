@@ -3,6 +3,10 @@
 > Universal Outlook add-in + connector for SuiteCRM.  
 > This document describes the architecture, key design decisions, and the delivery plan.
 
+> Current implementation direction (Q1 2026): contract-first connector hardening and
+> incremental delivery of authenticated profile-scoped endpoints (`/auth/login`,
+> `/lookup/by-email`, `/email/log`) before add-in UI expansion.
+
 ---
 
 ## 1. Goals

@@ -25,6 +25,12 @@ Run one-command smoke checks against local Apache (with `--resolve`):
 ops/scripts/smoke.sh
 ```
 
+Override target in development (for example local PHP server):
+
+```bash
+SMOKE_SCHEME=http SMOKE_HOST=suitesidecar.local SMOKE_IP=127.0.0.1 SMOKE_PORT=18080 ops/scripts/smoke.sh
+```
+
 ## Runtime storage (`connector-php/var`)
 
 `connector-php/var` is runtime-only storage (tokens, sessions, temporary runtime data).
@@ -92,6 +98,23 @@ curl -sS "${BASE_URL}/lookup/by-email?profileId=example-dev&email=known.user@exa
 curl -sS "${BASE_URL}/lookup/by-email?email=known.user@example.com&include=account" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "X-SuiteSidecar-Profile: example-dev"
+
+curl -sS -X POST "${BASE_URL}/email/log?profileId=example-dev" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "internetMessageId": "<abc123@mail.example.com>",
+      "subject": "Follow-up call",
+      "from": {"email": "sender@example.com"},
+      "to": [{"email": "known.user@example.com"}],
+      "sentAt": "2026-01-01T12:00:00Z"
+    },
+    "linkTo": {
+      "module": "Contacts",
+      "id": "contact-id"
+    }
+  }'
 ```
 
 ## How to test before DNS propagation
@@ -130,4 +153,22 @@ curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
   "https://${HOSTNAME}/lookup/by-email?email=known.user@example.com&include=account" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "X-SuiteSidecar-Profile: example-dev"
+
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  -X POST "https://${HOSTNAME}/email/log?profileId=example-dev" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "internetMessageId": "<abc123@mail.example.com>",
+      "subject": "Follow-up call",
+      "from": {"email": "sender@example.com"},
+      "to": [{"email": "known.user@example.com"}],
+      "sentAt": "2026-01-01T12:00:00Z"
+    },
+    "linkTo": {
+      "module": "Contacts",
+      "id": "contact-id"
+    }
+  }'
 ```

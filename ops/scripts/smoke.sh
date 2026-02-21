@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST="suitesidecar.example.com"
-IP="127.0.0.1"
-BASE_URL="https://${HOST}"
+SCHEME="${SMOKE_SCHEME:-https}"
+HOST="${SMOKE_HOST:-suitesidecar.example.com}"
+IP="${SMOKE_IP:-127.0.0.1}"
+DEFAULT_PORT="443"
+if [[ "${SCHEME}" == "http" ]]; then
+  DEFAULT_PORT="80"
+fi
+PORT="${SMOKE_PORT:-${DEFAULT_PORT}}"
+BASE_URL="${SCHEME}://${HOST}:${PORT}"
 DEFAULT_EMAIL="known.user@example.com"
 EMAIL="${1:-$DEFAULT_EMAIL}"
 
@@ -50,11 +56,14 @@ request() {
 
   local args=(
     --silent --show-error
-    --resolve "${HOST}:443:${IP}"
     -D "${headers_file}"
     -o "${body_file}"
     -X "${method}"
   )
+
+  if [[ -n "${IP}" ]]; then
+    args+=(--resolve "${HOST}:${PORT}:${IP}")
+  fi
 
   if [[ -n "${data}" ]]; then
     args+=(-H "Content-Type: application/json" -d "${data}")
@@ -122,6 +131,15 @@ if [[ "${code}" == "200" || "${code}" == "401" ]]; then
   mark_pass "GET ${lookup_path} -> ${code}"
 else
   mark_fail "GET ${lookup_path} -> ${code}" "$body" "$headers"
+fi
+
+# /email/log (auth required in current connector flow)
+email_log_payload='{"message":{"internetMessageId":"<smoke@example.com>","subject":"Smoke test","from":{"email":"sender@example.com"},"to":[{"email":"known.user@example.com"}],"sentAt":"2026-01-01T12:00:00Z"},"linkTo":{"module":"Contacts","id":"smoke-contact"}}'
+IFS='|' read -r code body headers < <(request "email-log" "POST" "/email/log?profileId=example-dev" "${email_log_payload}" "" "")
+if [[ "${code}" == "401" ]]; then
+  mark_pass "POST /email/log?profileId=example-dev -> 401"
+else
+  mark_fail "POST /email/log?profileId=example-dev -> ${code}" "$body" "$headers"
 fi
 
 # /auth/login only if endpoint exists

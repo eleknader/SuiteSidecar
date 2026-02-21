@@ -7,6 +7,7 @@ use SuiteSidecar\Auth\AuthMiddleware;
 use SuiteSidecar\Auth\AuthException;
 use SuiteSidecar\Auth\JwtService;
 use SuiteSidecar\Auth\SessionStore;
+use SuiteSidecar\EmailLogController;
 use SuiteSidecar\Http\Router;
 use SuiteSidecar\Http\Response;
 use SuiteSidecar\LookupController;
@@ -170,7 +171,46 @@ try {
             Response::error('server_error', 'Internal server error', 500);
         }
     });
-    // Future authenticated endpoints (for example /email/log) should use the same auth + profile resolver flow.
+    $router->post('/email/log', static function () use (
+        $buildJwtService,
+        $readHeaders,
+        $sessionStore,
+        $profileResolver
+    ): void {
+        $jwtService = $buildJwtService();
+        if ($jwtService === null) {
+            Response::error('server_error', 'Authentication service is not configured', 500);
+            return;
+        }
+
+        try {
+            $headers = $readHeaders();
+            $authMiddleware = new AuthMiddleware($jwtService, $sessionStore);
+            $authContext = $authMiddleware->requireAuth($headers);
+            if ($authContext === null) {
+                return;
+            }
+
+            $profile = $profileResolver->resolve($_GET, $headers);
+            $session = isset($authContext['session']) && is_array($authContext['session']) ? $authContext['session'] : [];
+            $sessionProfileId = isset($session['profileId']) ? (string) $session['profileId'] : '';
+            if ($sessionProfileId !== '' && $sessionProfileId !== $profile->id) {
+                Response::error('unauthorized', 'Profile does not match authenticated session', 401);
+                return;
+            }
+
+            $emailLogController = new EmailLogController();
+            $emailLogController->log($profile);
+        } catch (ProfileResolutionException $e) {
+            Response::error('bad_request', $e->getMessage(), 400);
+        } catch (AuthException $e) {
+            error_log('[requestId=' . Response::requestId() . '] Email log auth setup failed: ' . $e->getMessage());
+            Response::error('server_error', 'Internal server error', 500);
+        } catch (\Throwable $e) {
+            error_log('[requestId=' . Response::requestId() . '] Email log handler failed: ' . $e->getMessage());
+            Response::error('server_error', 'Internal server error', 500);
+        }
+    });
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = (string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);

@@ -13,7 +13,7 @@ final class ProfileResolver
     ) {
     }
 
-    public function resolveForLookup(array $query, array $headers): Profile
+    public function resolve(array $query, array $headers): Profile
     {
         $profileId = $this->extractProfileId($query, $headers);
         if ($profileId === null) {
@@ -29,6 +29,11 @@ final class ProfileResolver
         }
 
         return $profile;
+    }
+
+    public function resolveForLookup(array $query, array $headers): Profile
+    {
+        return $this->resolve($query, $headers);
     }
 
     private function extractProfileId(array $query, array $headers): ?string
