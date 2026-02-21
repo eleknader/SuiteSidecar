@@ -67,7 +67,7 @@ sudo systemctl reload apache2
 ## Connector-Side Checklist (Dedup + Conflict Mapping)
 - Normalize keys before lookup/create:
   - email-based keys -> lowercase + trim
-  - message-id key -> trim exact value from `internetMessageId`
+  - message-id key -> trim + lowercase + remove wrapping `< >` from `internetMessageId`
 - `/email/log` dedup pre-check:
   - query `Notes` by `suitesidecar_message_id_c` + `suitesidecar_profile_id_c`
   - if existing record found, return `409 conflict` (or `200 deduplicated=true` if policy chooses reuse)

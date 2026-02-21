@@ -106,7 +106,7 @@ subject, time, minimal body preview (optional)
 
 Add-in calls Connector:
 
-GET /v1/lookup/by-email?email=...
+GET /lookup/by-email?email=...
 
 Connector queries SuiteCRM:
 
@@ -143,7 +143,7 @@ Add-in opens a “Create” form prefilled from Outlook item.
 
 Add-in posts to connector:
 
-POST /v1/entities/contacts or POST /v1/entities/leads
+POST /entities/contacts or POST /entities/leads
 
 Connector creates the record in SuiteCRM and returns created entity summary.
 
@@ -344,7 +344,7 @@ Optional SSO / Microsoft identity integration
 
 ## 12. Open Questions
 
-Which SuiteCRM module to use for email logging by default (Notes vs Emails)?
+Whether to expose a profile-level switch for Notes vs Emails in future versions.
 
 Minimum supported Outlook clients (new Outlook vs classic vs Mac differences).
 
