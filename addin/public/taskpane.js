@@ -15,6 +15,8 @@ const state = {
 };
 
 const els = {};
+const SESSION_STORAGE_KEY = 'suitesidecar.session';
+const DEFAULT_CONNECTOR_BASE_URL = 'https://suitesidecar.example.com';
 
 function initElements() {
   const ids = [
@@ -116,18 +118,79 @@ function ensureAuthenticated(actionLabel, options = {}) {
   return true;
 }
 
+function availableStorages() {
+  const storages = [];
+  try {
+    if (window.localStorage) {
+      storages.push(window.localStorage);
+    }
+  } catch (error) {
+    console.warn('localStorage unavailable', error);
+  }
+  try {
+    if (window.sessionStorage) {
+      storages.push(window.sessionStorage);
+    }
+  } catch (error) {
+    console.warn('sessionStorage unavailable', error);
+  }
+  return storages;
+}
+
+function writeSessionSnapshot(rawValue) {
+  for (const storage of availableStorages()) {
+    try {
+      storage.setItem(SESSION_STORAGE_KEY, rawValue);
+    } catch (error) {
+      console.warn('Failed to persist session snapshot', error);
+    }
+  }
+}
+
+function readSessionSnapshot() {
+  const storages = availableStorages();
+  if (!storages.length) {
+    return '';
+  }
+
+  // Prefer durable localStorage entry, then sessionStorage as legacy fallback.
+  for (const storage of storages) {
+    try {
+      const raw = storage.getItem(SESSION_STORAGE_KEY);
+      if (typeof raw === 'string' && raw.trim()) {
+        return raw;
+      }
+    } catch (error) {
+      console.warn('Failed to read session snapshot', error);
+    }
+  }
+
+  return '';
+}
+
+function removeSessionSnapshot() {
+  for (const storage of availableStorages()) {
+    try {
+      storage.removeItem(SESSION_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Failed to remove session snapshot', error);
+    }
+  }
+}
+
 function persistSession() {
   const payload = {
     token: state.token,
     tokenExpiresAt: state.tokenExpiresAt,
     baseUrl: normalizeBaseUrl(els.connectorBaseUrl.value),
     profileId: activeProfileId(),
+    username: String(els.usernameInput.value || '').trim(),
   };
-  sessionStorage.setItem('suitesidecar.session', JSON.stringify(payload));
+  writeSessionSnapshot(JSON.stringify(payload));
 }
 
 function restoreSession() {
-  const raw = sessionStorage.getItem('suitesidecar.session');
+  const raw = readSessionSnapshot();
   if (!raw) {
     return;
   }
@@ -144,17 +207,28 @@ function restoreSession() {
       if (typeof parsed.tokenExpiresAt === 'string') {
         state.tokenExpiresAt = parsed.tokenExpiresAt;
       }
+      if (typeof parsed.username === 'string' && parsed.username) {
+        els.usernameInput.value = parsed.username;
+      }
       state.restoreProfileId = typeof parsed.profileId === 'string' ? parsed.profileId : '';
+      // Normalize/migrate any legacy snapshot format.
+      persistSession();
     }
   } catch (error) {
     console.warn('Failed to restore session', error);
+    removeSessionSnapshot();
   }
 }
 
-function clearSession() {
+function clearSession(options = {}) {
+  const dropStoredState = options.dropStoredState === true;
   state.token = '';
   state.tokenExpiresAt = '';
-  sessionStorage.removeItem('suitesidecar.session');
+  if (dropStoredState) {
+    removeSessionSnapshot();
+  } else {
+    persistSession();
+  }
   updateSessionInfo();
 }
 
@@ -163,7 +237,7 @@ function updateSessionInfo() {
     els.sessionInfo.textContent = 'Not authenticated.';
     return;
   }
-  const profileText = activeProfileId() || 'none';
+  const profileText = activeProfileId() || state.restoreProfileId || 'none';
   els.sessionInfo.textContent = `Authenticated. profile=${profileText} tokenExpiresAt=${state.tokenExpiresAt || 'unknown'}`;
 }
 
@@ -231,6 +305,9 @@ async function apiRequest(path, options = {}) {
     const message =
       (payload && payload.error && payload.error.message) ||
       `HTTP ${response.status} ${response.statusText}`;
+    if (response.status === 401 && options.auth !== false && state.token) {
+      clearSession();
+    }
     const error = new Error(message);
     error.status = response.status;
     error.payload = payload;
@@ -331,11 +408,15 @@ function formatLookup(payload) {
   ];
 
   if (person.link) {
-    rows.push(['Link', `<a href="${escapeHtml(person.link)}" target="_blank" rel="noreferrer">Open in CRM</a>`]);
+    rows.push([
+      'Link',
+      `<a href="${escapeHtml(person.link)}" target="_blank" rel="noreferrer">Open in CRM</a>`,
+      true,
+    ]);
   }
 
   const htmlRows = rows
-    .map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${typeof value === 'string' ? escapeHtml(value) : value}</dd>`)
+    .map(([key, value, isHtml]) => `<dt>${escapeHtml(key)}</dt><dd>${isHtml ? value : escapeHtml(value)}</dd>`)
     .join('');
 
   return `<dl class="person-grid">${htmlRows}</dl>`;
@@ -588,16 +669,26 @@ async function resolveBodyTextForLog() {
   return state.lastOutlookBodyText;
 }
 
-async function loadProfiles() {
+async function loadProfiles(options = {}) {
+  const suppressStatus = options.suppressStatus === true;
+
   try {
-    setStatus('info', 'Loading profiles...');
+    if (!suppressStatus) {
+      setStatus('info', 'Loading profiles...');
+    }
     const result = await apiRequest('/profiles', { auth: false });
     state.profiles = Array.isArray(result.payload && result.payload.profiles) ? result.payload.profiles : [];
     renderProfiles();
     persistSession();
-    setStatus('success', `Loaded ${state.profiles.length} profile(s).`, result.requestId || '');
+    if (!suppressStatus) {
+      setStatus('success', `Loaded ${state.profiles.length} profile(s).`, result.requestId || '');
+    }
+    return result;
   } catch (error) {
-    setStatus('error', `Failed to load profiles: ${error.message}`, error.requestId || '');
+    if (!suppressStatus) {
+      setStatus('error', `Failed to load profiles: ${error.message}`, error.requestId || '');
+    }
+    return null;
   }
 }
 
@@ -999,8 +1090,12 @@ function registerItemChangedHandler() {
   }, (result) => {
     if (result && result.status === Office.AsyncResultStatus.Succeeded) {
       state.itemChangedHandlerRegistered = true;
-      setStatus('info', 'ItemChanged handler registered. Automatic lookup is ready.');
-      scheduleAutoLookup('initial');
+      if (!state.token) {
+        setStatus('info', 'ItemChanged handler registered. Automatic lookup is ready.');
+      }
+      if (!(state.token && !activeProfileId())) {
+        scheduleAutoLookup('initial');
+      }
       return;
     }
 
@@ -1021,6 +1116,7 @@ function wireEvents() {
   els.createLeadBtn.addEventListener('click', createLead);
   els.logEmailBtn.addEventListener('click', logEmail);
   els.hydrateFromOutlookBtn.addEventListener('click', hydrateFromOutlook);
+  els.usernameInput.addEventListener('change', persistSession);
 
   els.profileSelect.addEventListener('change', () => {
     if (state.token) {
@@ -1039,6 +1135,40 @@ function wireEvents() {
   });
 }
 
+async function restoreConnectionOnStartup() {
+  const baseUrl = normalizeBaseUrl(els.connectorBaseUrl.value);
+  if (!baseUrl || baseUrl === DEFAULT_CONNECTOR_BASE_URL) {
+    setStatus('info', 'Ready. Configure connector, load profiles, then login.');
+    return;
+  }
+
+  if (state.token && isTokenExpired()) {
+    clearSession();
+    setStatus('warning', 'Stored session token is expired. Login again.');
+  }
+
+  const profileResult = await loadProfiles({ suppressStatus: true });
+  if (!profileResult) {
+    if (state.token) {
+      setStatus('warning', 'Stored session found, but automatic profile load failed. Check Connector URL.');
+    } else {
+      setStatus('warning', 'Automatic profile load failed. You can still retry manually.');
+    }
+    return;
+  }
+
+  if (state.token) {
+    updateSessionInfo();
+    setStatus('success', 'Session restored. Login not required.');
+    if (state.officeReady) {
+      scheduleAutoLookup('session_restore');
+    }
+    return;
+  }
+
+  setStatus('info', 'Profiles restored. Login to continue.');
+}
+
 function init() {
   initElements();
   restoreSession();
@@ -1050,20 +1180,20 @@ function init() {
   }
 
   if (!els.connectorBaseUrl.value) {
-    els.connectorBaseUrl.value = 'https://suitesidecar.example.com';
+    els.connectorBaseUrl.value = DEFAULT_CONNECTOR_BASE_URL;
   }
 
-  if (state.token && isTokenExpired()) {
-    clearSession();
-    setStatus('warning', 'Stored session token is expired. Login again.');
-  } else {
-    setStatus('info', 'Ready. Load profiles, login, then run lookup/actions.');
-  }
+  Promise.resolve(restoreConnectionOnStartup()).catch((error) => {
+    console.error('Startup restore failed', error);
+    setStatus('warning', 'Automatic restore failed. You can continue manually.');
+  });
 
   if (window.Office && typeof Office.onReady === 'function') {
     Office.onReady(() => {
       state.officeReady = true;
-      setStatus('info', 'Office runtime detected. You can use selected email context.');
+      if (!state.token) {
+        setStatus('info', 'Office runtime detected. You can use selected email context.');
+      }
       registerItemChangedHandler();
     });
   }

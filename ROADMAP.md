@@ -10,6 +10,9 @@
 - Cache-busting/versioned add-in asset URLs and no-cache hosting guidance.
 
 ## v0.3 - Stabilization and Test Coverage
+- Keep settings between sessions, restore connection automatically when opening Outlook / SuiteSidecar panel
+- Hide Connector and Login -parts when logged in and session valid
+- Hide all other panels exept Connector, Login and Status when not logged in
 - Expand automated smoke/e2e coverage for attachment and timeline scenarios.
 - Finalize release checklist for manifest/version/cache updates.
 - Complete remaining UI polish and host-specific compatibility checks.
