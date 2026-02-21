@@ -326,13 +326,15 @@ Log email metadata as SuiteCRM Notes (without attachments initially)
 
 Multi-instance profiles (basic)
 
-### 11.2 v0.2
+### 11.2 v0.2 (implemented)
 
 Attachments support (policy + size limits)
 
-Timeline view (Activities/History)
+Timeline view (Activities/History) with deep links (`/#/module/record/{id}`)
 
 Link logged email to selected CRM entity (manual selection)
+
+Attachment records linked to the logged email Note (fallback to target entity if Notes-parenting is rejected)
 
 ### 11.3 v0.3+
 
@@ -363,6 +365,8 @@ docs/ADR/*
 docs/SECURITY.md
 
 docs/DEPLOYMENT.md
+
+docs/CHANGELOG.md
 
 ## 14. Email Logging Strategy (SuiteCRM Mapping & Deduplication)
 
@@ -405,6 +409,11 @@ For each logged email, the connector will create a Note record with:
 Custom fields required (created during connector installation if missing):
 - `suitesidecar_message_id_c` (varchar, indexed)
 - `suitesidecar_profile_id_c` (varchar, indexed)
+
+Current behavior note:
+- Email body is stored as plain text to `Notes.description` when `options.storeBody=true`.
+- Rich formatting (HTML tags/styles) is not preserved in `Notes.description`.
+- `message.bodyHtml` is reserved for a future rich-body strategy and is not persisted in the current Notes-based flow.
 
 ---
 
@@ -477,13 +486,14 @@ If `internetMessageId` is missing on a host/client:
 
 Attachments are NOT stored in v0.1.
 
-Planned approach (v0.2):
+Implemented in v0.2:
 
 - Each attachment becomes a separate Note or Document record.
 - File content stored using:
   - `filecontents` attribute (base64)
 - Relationship:
-  - Link Document to main Note or directly to target entity.
+  - Link attachment records to the logged email Note.
+  - Fallback to linking directly to the target entity only if the CRM rejects `Notes -> Notes` parenting.
 
 Guardrails:
 - Max file size configurable
@@ -528,7 +538,7 @@ Connector returns a unified structure:
   "occurredAt": "2026-02-20T10:15:00Z",
   "title": "Re: Offer request",
   "summary": "Email logged from Outlook",
-  "link": "https://crm.example.com/#Notes/123"
+  "link": "https://crm.example.com/#/notes/record/123"
 }
 ```
 
@@ -549,6 +559,9 @@ This would likely be implemented as:
 Config flag per profile:
 
 emailLoggingStrategy: notes | emails
+
+Long-term future item:
+- Rich formatted body preservation (using `message.bodyHtml` + safe rendering policy) is intentionally deferred beyond current v0.x scope.
 
 ### 14.9 Operational Considerations
 
@@ -586,9 +599,9 @@ Or provide CLI script to create them
 Aspect	Decision
 Module	Notes (MVP)
 Dedup key	profileId + internetMessageId (stored in suitesidecar_message_id_c + suitesidecar_profile_id_c)
-Attachments	Not in v0.1
-Relationships	parent_type + parent_id on Note
-Body storage	Policy-controlled
+Attachments	Supported in v0.2 (size/policy controlled; stored as linked attachment records)
+Relationships	parent_type + parent_id on Note; attachments linked to logged Note with fallback to target entity
+Body storage	Plain text in `Notes.description` (policy-controlled)
 Timeline	Normalized structure
 
 This approach prioritizes:

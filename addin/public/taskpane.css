@@ -167,6 +167,48 @@ button:disabled {
   background: #fcfffe;
 }
 
+.timeline-box {
+  margin-top: 10px;
+}
+
+.timeline-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.timeline-list li {
+  margin: 0 0 10px;
+}
+
+.timeline-item-title {
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.timeline-item-time {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.timeline-item-summary {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+}
+
 .person-grid {
   display: grid;
   grid-template-columns: 96px 1fr;

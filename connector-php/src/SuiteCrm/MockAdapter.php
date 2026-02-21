@@ -6,6 +6,8 @@ namespace SuiteSidecar\SuiteCrm;
 
 final class MockAdapter implements CrmAdapterInterface
 {
+    private const CRM_BASE_URL = 'https://crm.example.com';
+
     public function lookupByEmail(string $email, array $include): array
     {
         $includeSet = array_fill_keys($include, true);
@@ -35,7 +37,7 @@ final class MockAdapter implements CrmAdapterInterface
                     'title' => 'Sales Manager',
                     'email' => $email,
                     'phone' => '+358 40 123 4567',
-                    'link' => 'https://crm.example.com/#Contacts/' . $personId,
+                    'link' => $this->deepLink('Contacts', $personId),
                 ],
             ],
             'suggestions' => [],
@@ -47,7 +49,7 @@ final class MockAdapter implements CrmAdapterInterface
                 'name' => 'Example Oy',
                 'phone' => '+358 9 123 456',
                 'website' => 'https://example.com',
-                'link' => 'https://crm.example.com/#Accounts/mock-account-001',
+                'link' => $this->deepLink('Accounts', 'mock-account-001'),
             ];
         }
 
@@ -57,7 +59,7 @@ final class MockAdapter implements CrmAdapterInterface
                     'id' => 'mock-opp-001',
                     'name' => 'CNC Lathe Offer',
                     'status' => 'In Progress',
-                    'link' => 'https://crm.example.com/#Opportunities/mock-opp-001',
+                    'link' => $this->deepLink('Opportunities', 'mock-opp-001'),
                 ],
             ];
         }
@@ -68,7 +70,7 @@ final class MockAdapter implements CrmAdapterInterface
                     'id' => 'mock-case-001',
                     'name' => 'Service Request',
                     'status' => 'New',
-                    'link' => 'https://crm.example.com/#Cases/mock-case-001',
+                    'link' => $this->deepLink('Cases', 'mock-case-001'),
                 ],
             ];
         }
@@ -80,14 +82,14 @@ final class MockAdapter implements CrmAdapterInterface
                     'occurredAt' => gmdate('c', time() - 86400),
                     'title' => 'Email logged from Outlook',
                     'summary' => 'Mock timeline entry',
-                    'link' => 'https://crm.example.com/#Notes/mock-note-001',
+                    'link' => $this->deepLink('Notes', 'mock-note-001'),
                 ],
                 [
                     'type' => 'Call',
                     'occurredAt' => gmdate('c', time() - 172800),
                     'title' => 'Follow-up call',
                     'summary' => 'Mock call entry',
-                    'link' => 'https://crm.example.com/#Calls/mock-call-001',
+                    'link' => $this->deepLink('Calls', 'mock-call-001'),
                 ],
             ];
         }
@@ -111,7 +113,7 @@ final class MockAdapter implements CrmAdapterInterface
             'module' => 'Contacts',
             'id' => $id,
             'displayName' => $displayName,
-            'link' => 'https://crm.example.com/#Contacts/' . $id,
+            'link' => $this->deepLink('Contacts', $id),
         ];
     }
 
@@ -131,7 +133,7 @@ final class MockAdapter implements CrmAdapterInterface
             'module' => 'Leads',
             'id' => $id,
             'displayName' => $displayName,
-            'link' => 'https://crm.example.com/#Leads/' . $id,
+            'link' => $this->deepLink('Leads', $id),
         ];
     }
 
@@ -152,9 +154,14 @@ final class MockAdapter implements CrmAdapterInterface
                 'module' => 'Notes',
                 'id' => $id,
                 'displayName' => $subject !== '' ? $subject : 'Email from Outlook',
-                'link' => 'https://crm.example.com/#Notes/' . $id,
+                'link' => $this->deepLink('Notes', $id),
             ],
             'deduplicated' => false,
         ];
+    }
+
+    private function deepLink(string $module, string $id): string
+    {
+        return self::CRM_BASE_URL . '/#/' . strtolower(trim($module)) . '/record/' . rawurlencode(trim($id));
     }
 }

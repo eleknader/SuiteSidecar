@@ -206,7 +206,7 @@ paths:
       summary: Log an email interaction to SuiteCRM
       description: >
         Logs an email message (metadata + optional body) and links it to an existing entity.
-        Attachments are optional and may be supported in later versions.
+        Attachments are optional and processed according to profile policy and size limits.
       requestBody:
         required: true
         content:
@@ -475,7 +475,8 @@ components:
           nullable: true
         link:
           type: string
-          description: Deep link to SuiteCRM UI (if available/known).
+          description: Deep link to SuiteCRM UI (if available/known), typically `/#/module/record/{id}`.
+          example: "https://crm.example.com/#/contacts/record/abc123"
           nullable: true
 
     AccountSummary:
@@ -494,6 +495,7 @@ components:
           nullable: true
         link:
           type: string
+          description: Deep link to SuiteCRM UI, typically `/#/module/record/{id}`.
           nullable: true
 
     RelatedSummary:
@@ -519,6 +521,7 @@ components:
           nullable: true
         link:
           type: string
+          description: Deep link to SuiteCRM UI, typically `/#/module/record/{id}`.
           nullable: true
 
     TimelineItem:
@@ -538,6 +541,7 @@ components:
           nullable: true
         link:
           type: string
+          description: Deep link to SuiteCRM UI, typically `/#/module/record/{id}`.
           nullable: true
 
     # ---------- Entities ----------
@@ -614,6 +618,8 @@ components:
           type: string
         link:
           type: string
+          description: Deep link to SuiteCRM UI, typically `/#/module/record/{id}`.
+          example: "https://crm.example.com/#/notes/record/abc123"
           nullable: true
 
     # ---------- Email ----------
@@ -645,11 +651,11 @@ components:
         storeBody:
           type: boolean
           default: false
-          description: Store email body (policy-controlled).
+          description: Store plain-text email body from `message.bodyText` (policy-controlled).
         storeAttachments:
           type: boolean
           default: false
-          description: Store attachments (policy-controlled; may be ignored in v0.1).
+          description: Store attachments (policy-controlled).
         maxAttachmentBytes:
           type: integer
           nullable: true
@@ -702,7 +708,7 @@ components:
         bodyHtml:
           type: string
           nullable: true
-          description: HTML body (optional; policy-controlled).
+          description: HTML body (optional; reserved for future rich-body persistence strategy).
         attachments:
           type: array
           items: { $ref: "#/components/schemas/Attachment" }

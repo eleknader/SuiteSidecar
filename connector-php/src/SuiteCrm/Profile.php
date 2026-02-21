@@ -122,6 +122,9 @@ final class Profile
 
     public function deepLink(string $module, string $id): string
     {
-        return $this->suitecrmBaseUrl . '/#' . $module . '/' . $id;
+        $moduleSegment = strtolower(trim($module));
+        $recordId = rawurlencode(trim($id));
+
+        return $this->suitecrmBaseUrl . '/#/' . $moduleSegment . '/record/' . $recordId;
     }
 }

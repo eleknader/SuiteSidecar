@@ -11,6 +11,14 @@ This document defines minimum SuiteCRM-side requirements for:
 - Integration user permissions for `Contacts`, `Leads`, and `Notes` (read/create).
 - Legacy customizations path available at `public/legacy/custom/Extension/modules/...`.
 
+## Notes Body and Attachment Constraints (v0.2)
+- Logged email body is persisted to `Notes.description` as plain text when `storeBody=true`.
+- `Notes.description` does not preserve original HTML formatting from Outlook body.
+- Rich/HTML body preservation is a future feature and not required for current deployment.
+- Attachment persistence is size-limited by:
+  - add-in `maxAttachmentBytes` option
+  - connector/PHP request limits (`upload_max_filesize`, `post_max_size`)
+
 ## Dedup Fields (DEV baseline)
 
 ### Notes module

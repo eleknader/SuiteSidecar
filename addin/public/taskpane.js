@@ -5,6 +5,8 @@ const state = {
   tokenExpiresAt: '',
   profiles: [],
   lastLookup: null,
+  lastOutlookBodyText: '',
+  lastOutlookAttachments: [],
   lastOutlookContextKey: '',
   officeReady: false,
   itemChangedHandlerRegistered: false,
@@ -29,15 +31,20 @@ function initElements() {
     'subjectInput',
     'internetMessageIdInput',
     'recipientEmailsInput',
+    'attachmentsInfo',
     'sentAtInput',
     'lookupBtn',
     'lookupResult',
+    'timelineResult',
     'firstNameInput',
     'lastNameInput',
     'titleInput',
     'companyInput',
     'linkModuleSelect',
     'linkIdInput',
+    'storeBodyCheckbox',
+    'storeAttachmentsCheckbox',
+    'maxAttachmentBytesInput',
     'createContactBtn',
     'createLeadBtn',
     'logEmailBtn',
@@ -52,6 +59,9 @@ function initElements() {
 }
 
 function setStatus(kind, message, requestId = '') {
+  if (!els.statusBox || !els.statusMessage || !els.statusRequestId) {
+    return;
+  }
   els.statusBox.className = `status status-${kind}`;
   els.statusMessage.textContent = message;
   els.statusRequestId.textContent = requestId ? `requestId: ${requestId}` : '';
@@ -267,6 +277,10 @@ function defaultLookupHintHtml() {
   return '<p class="hint">No lookup executed yet.</p>';
 }
 
+function defaultTimelineHintHtml() {
+  return '<p class="hint">No timeline loaded.</p>';
+}
+
 function buildOutlookContextKey(context) {
   if (!context) {
     return '';
@@ -280,13 +294,21 @@ function resetActionsForContext(context) {
   const names = splitName(context && context.senderName ? context.senderName : '');
 
   state.lastLookup = null;
+  state.lastOutlookBodyText = '';
+  state.lastOutlookAttachments = [];
   els.lookupResult.innerHTML = defaultLookupHintHtml();
+  if (els.timelineResult) {
+    els.timelineResult.innerHTML = defaultTimelineHintHtml();
+  }
   els.firstNameInput.value = names.firstName;
   els.lastNameInput.value = names.lastName;
   els.titleInput.value = '';
   els.companyInput.value = '';
   els.linkModuleSelect.value = 'Contacts';
   els.linkIdInput.value = '';
+  if (els.attachmentsInfo) {
+    els.attachmentsInfo.textContent = 'Attachments: none';
+  }
 }
 
 function formatLookup(payload) {
@@ -335,6 +357,235 @@ function parseRecipientEmails(raw) {
     .filter(Boolean);
 
   return emails.map((email) => ({ email }));
+}
+
+function readSafeValue(reader, fallbackValue) {
+  try {
+    const value = reader();
+    return value === null || value === undefined ? fallbackValue : value;
+  } catch (error) {
+    console.warn('Office item property read failed:', error);
+    return fallbackValue;
+  }
+}
+
+function readSafeRecipients(item) {
+  const toList = readSafeValue(() => item.to, []);
+  if (!Array.isArray(toList)) {
+    return '';
+  }
+  return toList
+    .map((entry) => String(readSafeValue(() => entry.emailAddress, '') || '').trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
+function formatTimeline(payload) {
+  const timeline = payload && payload.match && Array.isArray(payload.match.timeline) ? payload.match.timeline : [];
+  if (!timeline.length) {
+    return '<p class="hint">No timeline entries returned.</p>';
+  }
+
+  const html = timeline
+    .map((entry) => {
+      const type = escapeHtml(entry && entry.type ? entry.type : 'Activity');
+      const title = escapeHtml(entry && entry.title ? entry.title : '');
+      const summary = escapeHtml(entry && entry.summary ? entry.summary : '');
+      const occurredAt = escapeHtml(entry && entry.occurredAt ? String(entry.occurredAt) : '');
+      const link = entry && entry.link ? String(entry.link) : '';
+      const titleHtml = link
+        ? `<a href="${escapeHtml(link)}" target="_blank" rel="noreferrer">${title || type}</a>`
+        : `${title || type}`;
+
+      return `<li>
+        <span class="timeline-item-title">${type}</span>
+        <span>${titleHtml}</span>
+        ${occurredAt ? `<span class="timeline-item-time">${occurredAt}</span>` : ''}
+        ${summary ? `<p class="timeline-item-summary">${summary}</p>` : ''}
+      </li>`;
+    })
+    .join('');
+
+  return `<ol class="timeline-list">${html}</ol>`;
+}
+
+function normalizeBodyText(value) {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .trim();
+}
+
+function toBase64Utf8(value) {
+  return btoa(unescape(encodeURIComponent(String(value || ''))));
+}
+
+function toPositiveIntOrNull(value) {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function mapOutlookAttachmentMeta(raw) {
+  const id = String((raw && raw.id) || '').trim();
+  const name = String((raw && raw.name) || '').trim();
+  const sizeRaw = Number(raw && raw.size);
+  const sizeBytes = Number.isFinite(sizeRaw) && sizeRaw > 0 ? Math.floor(sizeRaw) : null;
+  const contentType = String((raw && raw.contentType) || '').trim() || null;
+
+  return {
+    id,
+    name,
+    sizeBytes,
+    contentType,
+  };
+}
+
+function updateAttachmentsInfo(attachments) {
+  if (!els.attachmentsInfo) {
+    return;
+  }
+
+  if (!Array.isArray(attachments) || attachments.length === 0) {
+    els.attachmentsInfo.textContent = 'Attachments: none';
+    return;
+  }
+
+  const totalBytes = attachments.reduce((sum, attachment) => {
+    const size = Number(attachment && attachment.sizeBytes);
+    return sum + (Number.isFinite(size) ? size : 0);
+  }, 0);
+
+  els.attachmentsInfo.textContent = `Attachments: ${attachments.length} file(s), ${totalBytes} bytes total`;
+}
+
+function attachmentContentAsync(item, attachmentId) {
+  return new Promise((resolve, reject) => {
+    if (!item || typeof item.getAttachmentContentAsync !== 'function') {
+      reject(new Error('Attachment content API not available in this host.'));
+      return;
+    }
+
+    item.getAttachmentContentAsync(attachmentId, (result) => {
+      const successStatus = window.Office && Office.AsyncResultStatus
+        ? Office.AsyncResultStatus.Succeeded
+        : 'succeeded';
+
+      if (result && result.status === successStatus) {
+        resolve(result.value || {});
+        return;
+      }
+
+      const message =
+        result && result.error && result.error.message
+          ? result.error.message
+          : 'unknown attachment read error';
+      reject(new Error(message));
+    });
+  });
+}
+
+async function resolveAttachmentsForLog(maxAttachmentBytes) {
+  if (!(window.Office && Office.context && Office.context.mailbox && Office.context.mailbox.item)) {
+    return { attachments: [], skippedCount: 0 };
+  }
+
+  const item = Office.context.mailbox.item;
+  const source = Array.isArray(item.attachments) ? item.attachments.map(mapOutlookAttachmentMeta) : [];
+  if (!source.length) {
+    return { attachments: [], skippedCount: 0 };
+  }
+
+  const output = [];
+  let skippedCount = 0;
+
+  for (const attachment of source) {
+    if (!attachment.id || !attachment.name) {
+      skippedCount += 1;
+      continue;
+    }
+
+    if (maxAttachmentBytes !== null && attachment.sizeBytes !== null && attachment.sizeBytes > maxAttachmentBytes) {
+      skippedCount += 1;
+      continue;
+    }
+
+    try {
+      const content = await attachmentContentAsync(item, attachment.id);
+      const format = content && typeof content.format === 'string' ? content.format.toLowerCase() : '';
+      let contentBase64 = null;
+
+      if (typeof content.content === 'string' && content.content) {
+        if (format === 'base64') {
+          contentBase64 = content.content;
+        } else if (format === 'text') {
+          contentBase64 = toBase64Utf8(content.content);
+        } else {
+          skippedCount += 1;
+          continue;
+        }
+      }
+
+      output.push({
+        name: attachment.name,
+        sizeBytes: attachment.sizeBytes || 0,
+        contentType: attachment.contentType,
+        contentBase64,
+      });
+    } catch (error) {
+      console.warn('Skipping attachment content', attachment.name, error);
+      skippedCount += 1;
+    }
+  }
+
+  return {
+    attachments: output,
+    skippedCount,
+  };
+}
+
+async function readOutlookBodyText(item) {
+  if (!item || !item.body || typeof item.body.getAsync !== 'function') {
+    return '';
+  }
+
+  return new Promise((resolve) => {
+    const coercionText = window.Office && Office.CoercionType && Office.CoercionType.Text
+      ? Office.CoercionType.Text
+      : 'text';
+    const successStatus = window.Office && Office.AsyncResultStatus
+      ? Office.AsyncResultStatus.Succeeded
+      : 'succeeded';
+
+    item.body.getAsync(coercionText, (result) => {
+      if (result && result.status === successStatus) {
+        resolve(normalizeBodyText(result.value));
+        return;
+      }
+
+      const errorMessage =
+        result && result.error && result.error.message
+          ? result.error.message
+          : 'unknown error';
+      console.warn('Unable to read Outlook item body text:', errorMessage);
+      resolve('');
+    });
+  });
+}
+
+async function resolveBodyTextForLog() {
+  if (state.lastOutlookBodyText) {
+    return state.lastOutlookBodyText;
+  }
+
+  if (!(window.Office && Office.context && Office.context.mailbox && Office.context.mailbox.item)) {
+    return '';
+  }
+
+  const bodyText = await readOutlookBodyText(Office.context.mailbox.item);
+  state.lastOutlookBodyText = bodyText || '';
+  return state.lastOutlookBodyText;
 }
 
 async function loadProfiles() {
@@ -443,12 +694,15 @@ async function runLookup(options = {}) {
       query: {
         profileId,
         email,
-        include: 'account',
+        include: 'account,timeline',
       },
     });
 
     state.lastLookup = result.payload;
     els.lookupResult.innerHTML = formatLookup(result.payload);
+    if (els.timelineResult) {
+      els.timelineResult.innerHTML = formatTimeline(result.payload);
+    }
 
     if (result.payload && !result.payload.notFound && result.payload.match && result.payload.match.person) {
       const person = result.payload.match.person;
@@ -553,6 +807,10 @@ async function logEmail() {
   const subject = String(els.subjectInput.value || '').trim();
   const linkModule = String(els.linkModuleSelect.value || '').trim();
   const linkId = String(els.linkIdInput.value || '').trim();
+  const storeBody = Boolean(els.storeBodyCheckbox && els.storeBodyCheckbox.checked);
+  const storeAttachments = Boolean(els.storeAttachmentsCheckbox && els.storeAttachmentsCheckbox.checked);
+  const maxAttachmentBytes = toPositiveIntOrNull(els.maxAttachmentBytesInput ? els.maxAttachmentBytesInput.value : '');
+  const contextAttachmentCount = Array.isArray(state.lastOutlookAttachments) ? state.lastOutlookAttachments.length : 0;
 
   if (!senderEmail || !recipients.length || !messageId || !subject || !linkModule || !linkId) {
     setStatus('warning', 'Sender, recipients, message ID, subject, link module and link id are required.');
@@ -561,6 +819,10 @@ async function logEmail() {
 
   const sentAtRaw = String(els.sentAtInput.value || '').trim();
   const sentAt = sentAtRaw ? new Date(sentAtRaw).toISOString() : new Date().toISOString();
+  const bodyText = storeBody ? await resolveBodyTextForLog() : '';
+  const attachmentResult = storeAttachments
+    ? await resolveAttachmentsForLog(maxAttachmentBytes)
+    : { attachments: [], skippedCount: 0 };
 
   const payload = {
     message: {
@@ -569,11 +831,17 @@ async function logEmail() {
       from: { email: senderEmail },
       to: recipients,
       sentAt,
-      bodyText: null,
+      bodyText: bodyText || null,
+      attachments: attachmentResult.attachments,
     },
     linkTo: {
       module: linkModule,
       id: linkId,
+    },
+    options: {
+      storeBody,
+      storeAttachments,
+      maxAttachmentBytes,
     },
   };
 
@@ -585,7 +853,12 @@ async function logEmail() {
       body: payload,
     });
     const rec = result.payload && result.payload.loggedRecord ? result.payload.loggedRecord : null;
-    setStatus('success', `Email logged: ${rec ? rec.id : 'ok'}`, result.requestId || '');
+    const attachmentStatus = storeAttachments
+      ? ` Attachments sent=${attachmentResult.attachments.length}, skipped=${attachmentResult.skippedCount}.`
+      : contextAttachmentCount > 0
+        ? ` Attachments detected=${contextAttachmentCount}, but storage is disabled.`
+        : '';
+    setStatus('success', `Email logged: ${rec ? rec.id : 'ok'}.${attachmentStatus}`, result.requestId || '');
   } catch (error) {
     setStatus('error', `Log Email failed: ${error.message}`, error.requestId || '');
   }
@@ -598,25 +871,21 @@ async function readOutlookContext() {
 
   const item = Office.context.mailbox.item;
 
-  const from = item.from || {};
-  const senderEmail = String(from.emailAddress || '').trim();
-  const senderName = String(from.displayName || '').trim();
+  const from = readSafeValue(() => item.from, {}) || {};
+  const senderEmail = String(readSafeValue(() => from.emailAddress, '') || '').trim();
+  const senderName = String(readSafeValue(() => from.displayName, '') || '').trim();
 
-  const recipients = Array.isArray(item.to)
-    ? item.to
-        .map((r) => String((r && r.emailAddress) || '').trim())
-        .filter(Boolean)
-        .join(', ')
-    : '';
+  const recipients = readSafeRecipients(item);
 
-  let messageId = '';
-  if (typeof item.internetMessageId === 'string') {
-    messageId = item.internetMessageId;
-  }
+  const messageIdRaw = readSafeValue(() => item.internetMessageId, '');
+  const messageId = typeof messageIdRaw === 'string' ? messageIdRaw : '';
 
-  const subject = String(item.subject || '').trim();
-  const sentAtDate = item.dateTimeCreated || item.dateTimeSent || null;
+  const subject = String(readSafeValue(() => item.subject, '') || '').trim();
+  const sentAtDate = readSafeValue(() => item.dateTimeCreated, null) || readSafeValue(() => item.dateTimeSent, null);
   const sentAt = sentAtDate instanceof Date ? sentAtDate : new Date();
+  const bodyText = await readOutlookBodyText(item);
+  const rawAttachments = readSafeValue(() => item.attachments, []);
+  const attachments = Array.isArray(rawAttachments) ? rawAttachments.map(mapOutlookAttachmentMeta) : [];
 
   return {
     senderEmail,
@@ -625,6 +894,8 @@ async function readOutlookContext() {
     messageId,
     subject,
     sentAt,
+    bodyText,
+    attachments,
   };
 }
 
@@ -640,12 +911,15 @@ async function hydrateFromOutlook(options = {}) {
       state.lastOutlookContextKey = contextKey;
       resetActionsForContext(context);
     }
+    state.lastOutlookBodyText = context.bodyText || '';
+    state.lastOutlookAttachments = Array.isArray(context.attachments) ? context.attachments : [];
 
     els.senderEmailInput.value = context.senderEmail;
     els.subjectInput.value = context.subject;
     els.internetMessageIdInput.value = context.messageId;
     els.recipientEmailsInput.value = context.recipients;
     els.sentAtInput.value = context.sentAt.toISOString().slice(0, 16);
+    updateAttachmentsInfo(state.lastOutlookAttachments);
 
     if (!suppressStatus) {
       setStatus('success', 'Loaded selected email context from Outlook.');
@@ -694,7 +968,10 @@ function scheduleAutoLookup(trigger) {
 
   state.autoLookupTimer = setTimeout(() => {
     state.autoLookupTimer = null;
-    tryAutoLookup(trigger);
+    Promise.resolve(tryAutoLookup(trigger)).catch((error) => {
+      console.error('Auto lookup failed on item change', error);
+      setStatus('warning', 'Automatic lookup failed after item change. You can continue manually.');
+    });
   }, 350);
 }
 
@@ -713,7 +990,12 @@ function registerItemChangedHandler() {
   }
 
   Office.context.mailbox.addHandlerAsync(Office.EventType.ItemChanged, () => {
-    scheduleAutoLookup('item_changed');
+    try {
+      scheduleAutoLookup('item_changed');
+    } catch (error) {
+      console.error('Failed to process ItemChanged event', error);
+      setStatus('warning', 'Item change handling failed. Reopen the pane if needed.');
+    }
   }, (result) => {
     if (result && result.status === Office.AsyncResultStatus.Succeeded) {
       state.itemChangedHandlerRegistered = true;
@@ -762,6 +1044,10 @@ function init() {
   restoreSession();
   wireEvents();
   updateSessionInfo();
+
+  if (els.attachmentsInfo && !els.attachmentsInfo.textContent) {
+    els.attachmentsInfo.textContent = 'Attachments: none';
+  }
 
   if (!els.connectorBaseUrl.value) {
     els.connectorBaseUrl.value = 'https://suitesidecar.example.com';

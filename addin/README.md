@@ -8,9 +8,11 @@ This folder contains the Outlook taskpane MVP vertical slice.
 - Login: `POST /auth/login`
 - Logout: `POST /auth/logout`
 - Lookup sender: `GET /lookup/by-email`
+- Lookup timeline view: `GET /lookup/by-email?include=timeline`
 - Create Contact: `POST /entities/contacts`
 - Create Lead: `POST /entities/leads`
 - Log Email (SuiteCRM Notes): `POST /email/log`
+- Log Email options: `storeBody`, `storeAttachments`, `maxAttachmentBytes`
 - Show requestId in UI errors for support
 - Auto-lookup on item change via `Office.EventType.ItemChanged` (after login)
 - Profile/connector changes clear local session and require re-login
@@ -74,6 +76,10 @@ Published web files:
 5. Open an email in read mode and launch SuiteSidecar from the ribbon.
 6. Load profiles, login, then run lookup/create/log actions.
 
+Outlook Desktop note:
+- If the task pane disappears when selecting another email, pin the pane from the add-in title bar (pushpin icon).
+- The manifest already enables pinning; without pinning, Outlook can close the pane on item change by design.
+
 ## Microsoft 365 propagation note
 
 - Microsoft 365 admin center may show stale icon/metadata for a while after an update.
@@ -83,6 +89,11 @@ Published web files:
   3. wait 5-30 minutes (sometimes longer)
   4. hard refresh the admin center view
 - If icons look broken briefly but URLs return `200`, this is usually propagation/cache delay.
+- For taskpane cache refresh after UI changes:
+  1. bump add-in manifest `<Version>`
+  2. bump `?v=` in `manifest/suitesidecar.xml` taskpane URL
+  3. bump `?v=` in `addin/public/taskpane.html` for JS/CSS
+  4. run `bash ops/scripts/publish-addin.sh`
 
 ## Validation checklist
 

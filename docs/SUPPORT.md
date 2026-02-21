@@ -40,6 +40,17 @@ Use this for first-line troubleshooting. Always capture `requestId` from API/add
 3. If `502 suitecrm_bad_response`:
    - verify target module relationship and required fields in SuiteCRM.
 
+## Known behavior (current)
+
+1. Note body formatting is plain text:
+   - `Notes.description` stores plain text.
+   - Outlook HTML formatting (tags/styles) is not preserved in current v0.2 behavior.
+2. Attachment skip behavior is expected with size guardrails:
+   - add-in status shows `Attachments sent=<n>, skipped=<n>`.
+   - skipped files are commonly due to `maxAttachmentBytes` or host API read limitations.
+3. Timeline links use SuiteCRM route style:
+   - expected format: `https://<crm>/#/module/record/<id>` (for example `#/notes/record/<id>`).
+
 ## RequestId usage
 
 - RequestId is the correlation key across connector logs and API responses.

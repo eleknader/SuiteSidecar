@@ -10,9 +10,9 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./taskpane.css" />
+    <link rel="stylesheet" href="./taskpane.css?v=0.1.4" />
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script defer src="./taskpane.js"></script>
+    <script defer src="./taskpane.js?v=0.1.4"></script>
   </head>
   <body>
     <div class="bg-shape bg-shape-a"></div>
@@ -71,6 +71,7 @@
 
         <label for="recipientEmailsInput">Recipients (comma-separated)</label>
         <input id="recipientEmailsInput" type="text" placeholder="recipient@example.com" />
+        <p id="attachmentsInfo" class="hint"></p>
 
         <label for="sentAtInput">Sent At (UTC)</label>
         <input id="sentAtInput" type="datetime-local" />
@@ -84,6 +85,9 @@
 
         <div id="lookupResult" class="result-box">
           <p class="hint">No lookup executed yet.</p>
+        </div>
+        <div id="timelineResult" class="result-box timeline-box">
+          <p class="hint">No timeline loaded.</p>
         </div>
       </section>
 
@@ -112,6 +116,19 @@
 
         <label for="linkIdInput">Log Link ID</label>
         <input id="linkIdInput" type="text" placeholder="CRM record id" />
+
+        <label class="checkbox-row">
+          <input id="storeBodyCheckbox" type="checkbox" checked />
+          <span>Store body text in Note description</span>
+        </label>
+
+        <label class="checkbox-row">
+          <input id="storeAttachmentsCheckbox" type="checkbox" />
+          <span>Store attachments (subject to max size)</span>
+        </label>
+
+        <label for="maxAttachmentBytesInput">Max Attachment Bytes</label>
+        <input id="maxAttachmentBytesInput" type="number" min="1" step="1" value="1048576" />
 
         <div class="row wrap">
           <button id="createContactBtn" type="button">Create Contact</button>
