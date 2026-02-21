@@ -142,12 +142,21 @@ final class OAuthTokenProvider implements AccessTokenProviderInterface
         curl_close($ch);
 
         if ($statusCode >= 400) {
+            $bodySnippet = $this->bodySnippet((string) $rawResponse);
+            $decoded = json_decode((string) $rawResponse, true);
             $this->log(
                 'Token fetch failed for profile ' . $profile->id
                 . ': HTTP ' . $statusCode
-                . ' body="' . $this->bodySnippet((string) $rawResponse) . '"'
+                . ' body="' . $bodySnippet . '"'
             );
-            $responseStatus = $statusCode === 400 || $statusCode === 401 ? 401 : 502;
+
+            $responseStatus = 502;
+            if ($statusCode === 400 || $statusCode === 401) {
+                $responseStatus = 401;
+            } elseif (is_array($decoded) && $this->isCredentialFailurePayload($decoded)) {
+                // Some SuiteCRM deployments return 500 for invalid username/password.
+                $responseStatus = 401;
+            }
             throw new SuiteCrmAuthException('SuiteCRM token endpoint rejected the request', $responseStatus);
         }
 
@@ -234,7 +243,45 @@ final class OAuthTokenProvider implements AccessTokenProviderInterface
 
     private function bodySnippet(string $body): string
     {
-        return substr(preg_replace('/\s+/', ' ', trim($body)) ?? '', 0, 200);
+        $snippet = substr(preg_replace('/\s+/', ' ', trim($body)) ?? '', 0, 200);
+
+        // Redact possible secret-bearing fragments from upstream error bodies.
+        $snippet = preg_replace('/(password\s+is\s+invalid\s*:\s*)([^",}]+)/i', '$1[redacted]', $snippet) ?? $snippet;
+        $snippet = preg_replace('/(client_secret=)([^&\s]+)/i', '$1[redacted]', $snippet) ?? $snippet;
+        $snippet = preg_replace('/(password=)([^&\s]+)/i', '$1[redacted]', $snippet) ?? $snippet;
+
+        return $snippet;
+    }
+
+    private function isCredentialFailurePayload(array $decoded): bool
+    {
+        $parts = [];
+        foreach (['error', 'error_description', 'message'] as $field) {
+            if (isset($decoded[$field]) && is_string($decoded[$field])) {
+                $parts[] = strtolower($decoded[$field]);
+            }
+        }
+
+        $text = implode(' ', $parts);
+        if ($text === '') {
+            return false;
+        }
+
+        foreach ([
+            'invalid_client',
+            'invalid_grant',
+            'client authentication failed',
+            'password is invalid',
+            'no user found',
+            'invalid username',
+            'invalid credentials',
+        ] as $needle) {
+            if (str_contains($text, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function log(string $message): void
