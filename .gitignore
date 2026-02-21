@@ -11,3 +11,6 @@ connector-php/var/*
 vendor/
 !connector-php/var/.gitkeep
 suitesidecar.code-workspace
+AGENTS.local.md
+ROADMAP.local.md
+connector-php/var/**
