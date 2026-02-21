@@ -10,3 +10,4 @@ AGENTS.local.md
 ROADMAP.local.md
 connector-php/.env
 connector-php/.env.local
+tools/

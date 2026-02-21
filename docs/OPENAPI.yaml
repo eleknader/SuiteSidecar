@@ -80,16 +80,6 @@ paths:
         "500":
           $ref: "#/components/responses/ServerError"
 
-  /auth/logout:
-    post:
-      tags: [Auth]
-      summary: Logout and invalidate the current session token
-      responses:
-        "204":
-          description: Logged out
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
   /profiles:
     get:
       tags: [Profiles]

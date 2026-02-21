@@ -572,7 +572,7 @@ suitesidecar_message_id_c exists in Notes
 
 Field is indexed
 
-Field length >= 255
+Field length >= 191
 
 suitesidecar_profile_id_c exists in Notes
 
