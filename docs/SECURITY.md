@@ -11,4 +11,5 @@
 - Versioned files must stay public-safe and free of secrets.
 - `connector-php/config/profiles.example.php` is for placeholders only.
 - `connector-php/config/profiles.php` is local-only and ignored by git.
+- `connector-php/var/` is runtime-only and ignored by git (tokens/sessions must never be committed).
 - Keep operational machine-specific notes in `AGENTS.local.md` (ignored).

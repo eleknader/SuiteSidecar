@@ -25,6 +25,19 @@ Run one-command smoke checks against local Apache (with `--resolve`):
 ops/scripts/smoke.sh
 ```
 
+## Runtime storage (`connector-php/var`)
+
+`connector-php/var` is runtime-only storage (tokens, sessions, temporary runtime data).
+It is intentionally excluded from git and must not contain committed files.
+
+Create and secure it on the target host:
+
+```bash
+mkdir -p connector-php/var/tokens connector-php/var/sessions
+sudo chown -R www-data:www-data connector-php/var
+sudo chmod -R 750 connector-php/var
+```
+
 ## Profile OAuth secrets via environment variables
 
 Profile id `example-dev` is normalized to `EXAMPLE_DEV` for env keys.
