@@ -6,12 +6,14 @@ This folder contains the Outlook taskpane MVP vertical slice.
 
 - Load profiles from connector: `GET /profiles`
 - Login: `POST /auth/login`
+- Logout: `POST /auth/logout`
 - Lookup sender: `GET /lookup/by-email`
 - Create Contact: `POST /entities/contacts`
 - Create Lead: `POST /entities/leads`
 - Log Email (SuiteCRM Notes): `POST /email/log`
 - Show requestId in UI errors for support
 - Auto-lookup on item change via `Office.EventType.ItemChanged` (after login)
+- Profile/connector changes clear local session and require re-login
 
 ## Manifest split (public-safe + local-only)
 
@@ -71,6 +73,16 @@ Published web files:
    - Upload `addin/manifest/suitesidecar.local.xml`.
 5. Open an email in read mode and launch SuiteSidecar from the ribbon.
 6. Load profiles, login, then run lookup/create/log actions.
+
+## Microsoft 365 propagation note
+
+- Microsoft 365 admin center may show stale icon/metadata for a while after an update.
+- For predictable updates:
+  1. bump `<Version>` in the uploaded manifest
+  2. upload the new manifest
+  3. wait 5-30 minutes (sometimes longer)
+  4. hard refresh the admin center view
+- If icons look broken briefly but URLs return `200`, this is usually propagation/cache delay.
 
 ## Validation checklist
 

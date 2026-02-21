@@ -5,9 +5,11 @@ const state = {
   tokenExpiresAt: '',
   profiles: [],
   lastLookup: null,
+  lastOutlookContextKey: '',
   officeReady: false,
   itemChangedHandlerRegistered: false,
   autoLookupTimer: null,
+  restoreProfileId: '',
 };
 
 const els = {};
@@ -63,6 +65,47 @@ function activeProfileId() {
   return String(els.profileSelect.value || '').trim();
 }
 
+function isTokenExpired() {
+  if (!state.token || !state.tokenExpiresAt) {
+    return false;
+  }
+
+  const expiresAtMs = Date.parse(state.tokenExpiresAt);
+  if (Number.isNaN(expiresAtMs)) {
+    return false;
+  }
+
+  return Date.now() >= expiresAtMs;
+}
+
+function ensureAuthenticated(actionLabel, options = {}) {
+  const suppressStatus = options.suppressStatus === true;
+
+  if (!state.token) {
+    if (!suppressStatus) {
+      setStatus('warning', `Login is required before ${actionLabel}.`);
+    }
+    return false;
+  }
+
+  if (isTokenExpired()) {
+    clearSession();
+    if (!suppressStatus) {
+      setStatus('warning', `Session expired. Login again before ${actionLabel}.`);
+    }
+    return false;
+  }
+
+  if (!activeProfileId()) {
+    if (!suppressStatus) {
+      setStatus('warning', `Select profile before ${actionLabel}.`);
+    }
+    return false;
+  }
+
+  return true;
+}
+
 function persistSession() {
   const payload = {
     token: state.token,
@@ -110,7 +153,8 @@ function updateSessionInfo() {
     els.sessionInfo.textContent = 'Not authenticated.';
     return;
   }
-  els.sessionInfo.textContent = `Authenticated. tokenExpiresAt=${state.tokenExpiresAt || 'unknown'}`;
+  const profileText = activeProfileId() || 'none';
+  els.sessionInfo.textContent = `Authenticated. profile=${profileText} tokenExpiresAt=${state.tokenExpiresAt || 'unknown'}`;
 }
 
 function parseJsonSafe(text) {
@@ -146,6 +190,11 @@ async function apiRequest(path, options = {}) {
 
   if (options.auth !== false && state.token) {
     headers.Authorization = `Bearer ${state.token}`;
+  }
+
+  const headerProfileId = String(options.profileId || '').trim();
+  if (headerProfileId) {
+    headers['X-SuiteSidecar-Profile'] = headerProfileId;
   }
 
   let body;
@@ -212,6 +261,32 @@ function splitName(displayName) {
     firstName: parts[0],
     lastName: parts.slice(1).join(' '),
   };
+}
+
+function defaultLookupHintHtml() {
+  return '<p class="hint">No lookup executed yet.</p>';
+}
+
+function buildOutlookContextKey(context) {
+  if (!context) {
+    return '';
+  }
+
+  const sentAtIso = context.sentAt instanceof Date ? context.sentAt.toISOString() : '';
+  return [context.messageId, context.senderEmail, context.subject, sentAtIso].join('|');
+}
+
+function resetActionsForContext(context) {
+  const names = splitName(context && context.senderName ? context.senderName : '');
+
+  state.lastLookup = null;
+  els.lookupResult.innerHTML = defaultLookupHintHtml();
+  els.firstNameInput.value = names.firstName;
+  els.lastNameInput.value = names.lastName;
+  els.titleInput.value = '';
+  els.companyInput.value = '';
+  els.linkModuleSelect.value = 'Contacts';
+  els.linkIdInput.value = '';
 }
 
 function formatLookup(payload) {
@@ -308,6 +383,37 @@ async function login() {
   }
 }
 
+async function logout(options = {}) {
+  const suppressStatus = options.suppressStatus === true;
+
+  if (!state.token) {
+    clearSession();
+    if (!suppressStatus) {
+      setStatus('info', 'No active session.');
+    }
+    return;
+  }
+
+  try {
+    const result = await apiRequest('/auth/logout', {
+      method: 'POST',
+    });
+    clearSession();
+    if (!suppressStatus) {
+      setStatus('success', 'Logged out.', result.requestId || '');
+    }
+  } catch (error) {
+    clearSession();
+    if (!suppressStatus) {
+      if (error.status === 401) {
+        setStatus('warning', 'Session was already invalid on server. Local session cleared.', error.requestId || '');
+        return;
+      }
+      setStatus('warning', `Logout request failed: ${error.message}. Local session cleared.`, error.requestId || '');
+    }
+  }
+}
+
 function buildLookupEmail() {
   const sender = String(els.senderEmailInput.value || '').trim();
   return sender;
@@ -316,10 +422,7 @@ function buildLookupEmail() {
 async function runLookup(options = {}) {
   const suppressStatus = options.suppressStatus === true;
 
-  if (!state.token) {
-    if (!suppressStatus) {
-      setStatus('warning', 'Login is required before lookup.');
-    }
+  if (!ensureAuthenticated('lookup', { suppressStatus })) {
     return null;
   }
 
@@ -331,11 +434,14 @@ async function runLookup(options = {}) {
     return null;
   }
 
+  const profileId = activeProfileId();
+
   try {
     const result = await apiRequest('/lookup/by-email', {
       method: 'GET',
+      profileId,
       query: {
-        profileId: activeProfileId(),
+        profileId,
         email,
         include: 'account',
       },
@@ -348,11 +454,14 @@ async function runLookup(options = {}) {
       const person = result.payload.match.person;
       els.linkModuleSelect.value = person.module || 'Contacts';
       els.linkIdInput.value = person.id || '';
-      if (!els.firstNameInput.value && person.firstName) {
+      if (person.firstName) {
         els.firstNameInput.value = person.firstName;
       }
-      if (!els.lastNameInput.value && person.lastName) {
+      if (person.lastName) {
         els.lastNameInput.value = person.lastName;
+      }
+      if (person.title) {
+        els.titleInput.value = person.title;
       }
     }
 
@@ -369,10 +478,11 @@ async function runLookup(options = {}) {
 }
 
 async function createContact() {
-  if (!state.token) {
-    setStatus('warning', 'Login is required before creating contact.');
+  if (!ensureAuthenticated('creating contact')) {
     return;
   }
+
+  const profileId = activeProfileId();
 
   const payload = {
     firstName: String(els.firstNameInput.value || '').trim(),
@@ -384,7 +494,8 @@ async function createContact() {
   try {
     const result = await apiRequest('/entities/contacts', {
       method: 'POST',
-      query: { profileId: activeProfileId() },
+      profileId,
+      query: { profileId },
       body: payload,
     });
 
@@ -398,10 +509,11 @@ async function createContact() {
 }
 
 async function createLead() {
-  if (!state.token) {
-    setStatus('warning', 'Login is required before creating lead.');
+  if (!ensureAuthenticated('creating lead')) {
     return;
   }
+
+  const profileId = activeProfileId();
 
   const payload = {
     firstName: String(els.firstNameInput.value || '').trim(),
@@ -414,7 +526,8 @@ async function createLead() {
   try {
     const result = await apiRequest('/entities/leads', {
       method: 'POST',
-      query: { profileId: activeProfileId() },
+      profileId,
+      query: { profileId },
       body: payload,
     });
 
@@ -428,10 +541,11 @@ async function createLead() {
 }
 
 async function logEmail() {
-  if (!state.token) {
-    setStatus('warning', 'Login is required before log email.');
+  if (!ensureAuthenticated('logging email')) {
     return;
   }
+
+  const profileId = activeProfileId();
 
   const senderEmail = String(els.senderEmailInput.value || '').trim();
   const recipients = parseRecipientEmails(els.recipientEmailsInput.value);
@@ -466,7 +580,8 @@ async function logEmail() {
   try {
     const result = await apiRequest('/email/log', {
       method: 'POST',
-      query: { profileId: activeProfileId() },
+      profileId,
+      query: { profileId },
       body: payload,
     });
     const rec = result.payload && result.payload.loggedRecord ? result.payload.loggedRecord : null;
@@ -518,22 +633,19 @@ async function hydrateFromOutlook(options = {}) {
 
   try {
     const context = await readOutlookContext();
+    const contextKey = buildOutlookContextKey(context);
+    const contextChanged = contextKey !== state.lastOutlookContextKey;
+
+    if (contextChanged) {
+      state.lastOutlookContextKey = contextKey;
+      resetActionsForContext(context);
+    }
 
     els.senderEmailInput.value = context.senderEmail;
     els.subjectInput.value = context.subject;
     els.internetMessageIdInput.value = context.messageId;
     els.recipientEmailsInput.value = context.recipients;
     els.sentAtInput.value = context.sentAt.toISOString().slice(0, 16);
-
-    if (context.senderName) {
-      const names = splitName(context.senderName);
-      if (!els.firstNameInput.value) {
-        els.firstNameInput.value = names.firstName;
-      }
-      if (!els.lastNameInput.value) {
-        els.lastNameInput.value = names.lastName;
-      }
-    }
 
     if (!suppressStatus) {
       setStatus('success', 'Loaded selected email context from Outlook.');
@@ -555,6 +667,12 @@ async function tryAutoLookup(trigger) {
 
   if (!state.token) {
     setStatus('info', `Outlook item changed (${trigger}). Login to enable automatic lookup.`);
+    return;
+  }
+
+  if (isTokenExpired()) {
+    clearSession();
+    setStatus('info', `Outlook item changed (${trigger}). Session expired; login to continue automatic lookup.`);
     return;
   }
 
@@ -615,18 +733,28 @@ function registerItemChangedHandler() {
 function wireEvents() {
   els.loadProfilesBtn.addEventListener('click', loadProfiles);
   els.loginBtn.addEventListener('click', login);
-  els.logoutBtn.addEventListener('click', () => {
-    clearSession();
-    setStatus('info', 'Session cleared.');
-  });
+  els.logoutBtn.addEventListener('click', logout);
   els.lookupBtn.addEventListener('click', runLookup);
   els.createContactBtn.addEventListener('click', createContact);
   els.createLeadBtn.addEventListener('click', createLead);
   els.logEmailBtn.addEventListener('click', logEmail);
   els.hydrateFromOutlookBtn.addEventListener('click', hydrateFromOutlook);
 
-  els.profileSelect.addEventListener('change', persistSession);
-  els.connectorBaseUrl.addEventListener('change', persistSession);
+  els.profileSelect.addEventListener('change', () => {
+    if (state.token) {
+      clearSession();
+      setStatus('info', 'Profile changed. Login again for the selected profile.');
+    }
+    persistSession();
+  });
+
+  els.connectorBaseUrl.addEventListener('change', () => {
+    if (state.token) {
+      clearSession();
+      setStatus('info', 'Connector URL changed. Login again.');
+    }
+    persistSession();
+  });
 }
 
 function init() {
@@ -639,7 +767,12 @@ function init() {
     els.connectorBaseUrl.value = 'https://suitesidecar.example.com';
   }
 
-  setStatus('info', 'Ready. Load profiles, login, then run lookup/actions.');
+  if (state.token && isTokenExpired()) {
+    clearSession();
+    setStatus('warning', 'Stored session token is expired. Login again.');
+  } else {
+    setStatus('info', 'Ready. Load profiles, login, then run lookup/actions.');
+  }
 
   if (window.Office && typeof Office.onReady === 'function') {
     Office.onReady(() => {
