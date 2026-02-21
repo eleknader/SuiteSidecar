@@ -50,110 +50,24 @@ final class V8Adapter implements CrmAdapterInterface
         return $payload;
     }
 
-    public function logEmail(array $payload): array
-    {
-        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : [];
-        $linkTo = isset($payload['linkTo']) && is_array($payload['linkTo']) ? $payload['linkTo'] : [];
-        $options = isset($payload['options']) && is_array($payload['options']) ? $payload['options'] : [];
-
-        $subject = trim((string) ($message['subject'] ?? 'Email log'));
-        if ($subject === '') {
-            $subject = 'Email log';
-        }
-
-        $storeBody = (bool) ($options['storeBody'] ?? false);
-        $description = $this->buildDescription($message, $storeBody);
-        $parentType = trim((string) ($linkTo['module'] ?? ''));
-        $parentId = trim((string) ($linkTo['id'] ?? ''));
-        $messageId = trim((string) ($message['internetMessageId'] ?? ''));
-
-        if ($messageId !== '') {
-            $existing = $this->findFirstByFilters('Notes', [
-                'filter[suitesidecar_message_id_c][eq]' => $messageId,
-                'filter[suitesidecar_profile_id_c][eq]' => $this->profile->id,
-                'page[size]' => 1,
-                'fields[Notes]' => 'name,suitesidecar_message_id_c,suitesidecar_profile_id_c',
-            ]);
-            if ($existing !== null) {
-                $existingId = isset($existing['id']) ? (string) $existing['id'] : 'unknown';
-                throw new SuiteCrmConflictException('Email already logged (noteId=' . $existingId . ')');
-            }
-        }
-
-        $response = $this->client->post('/Api/V8/module/Notes', [
-            'data' => [
-                'type' => 'Notes',
-                'attributes' => [
-                    'name' => substr($subject, 0, 255),
-                    'description' => $description,
-                    'parent_type' => $parentType,
-                    'parent_id' => $parentId,
-                    'suitesidecar_message_id_c' => $messageId,
-                    'suitesidecar_profile_id_c' => $this->profile->id,
-                ],
-            ],
-        ]);
-
-        $item = $response['data'] ?? null;
-        if (!is_array($item)) {
-            throw new SuiteCrmBadResponseException('SuiteCRM response is missing created note payload');
-        }
-
-        $id = isset($item['id']) ? (string) $item['id'] : '';
-        if ($id === '') {
-            throw new SuiteCrmBadResponseException('SuiteCRM response is missing created note id');
-        }
-
-        $attributes = $item['attributes'] ?? [];
-        $displayName = $subject;
-        if (is_array($attributes) && isset($attributes['name']) && trim((string) $attributes['name']) !== '') {
-            $displayName = (string) $attributes['name'];
-        }
-
-        return [
-            'loggedRecord' => [
-                'module' => 'Notes',
-                'id' => $id,
-                'displayName' => substr($displayName, 0, 255),
-                'link' => $this->profile->deepLink('Notes', $id),
-            ],
-            'deduplicated' => false,
-        ];
-    }
-
     public function createContact(array $payload): array
     {
-        $email = trim((string) ($payload['email'] ?? ''));
-        $emailNorm = $this->normalizeEmail($email);
-        if ($emailNorm !== '') {
-            $existing = $this->findFirstByFilters('Contacts', [
-                'filter[suitesidecar_email_norm_c][eq]' => $emailNorm,
-                'page[size]' => 1,
-                'fields[Contacts]' => 'first_name,last_name,email1,suitesidecar_email_norm_c',
-            ]);
-            if ($existing !== null) {
-                $existingId = isset($existing['id']) ? (string) $existing['id'] : 'unknown';
-                throw new SuiteCrmConflictException('Contact already exists for email (contactId=' . $existingId . ')');
-            }
-        }
-
         $attributes = [
             'first_name' => (string) ($payload['firstName'] ?? ''),
             'last_name' => (string) ($payload['lastName'] ?? ''),
-            'email1' => $email,
+            'email1' => (string) ($payload['email'] ?? ''),
             'title' => (string) ($payload['title'] ?? ''),
             'phone_work' => (string) ($payload['phone'] ?? ''),
-            'suitesidecar_email_norm_c' => $emailNorm,
         ];
-
-        $source = trim((string) ($payload['source'] ?? ''));
-        if ($source !== '') {
-            $attributes['lead_source'] = $source;
-        }
 
         $accountName = trim((string) ($payload['accountName'] ?? ''));
         if ($accountName !== '') {
             $attributes['account_name'] = $accountName;
+        }
+
+        $source = trim((string) ($payload['source'] ?? ''));
+        if ($source !== '') {
+            $attributes['lead_source'] = $source;
         }
 
         $this->mergeCustomFields($attributes, $payload['customFields'] ?? null);
@@ -170,27 +84,12 @@ final class V8Adapter implements CrmAdapterInterface
 
     public function createLead(array $payload): array
     {
-        $email = trim((string) ($payload['email'] ?? ''));
-        $emailNorm = $this->normalizeEmail($email);
-        if ($emailNorm !== '') {
-            $existing = $this->findFirstByFilters('Leads', [
-                'filter[suitesidecar_email_norm_c][eq]' => $emailNorm,
-                'page[size]' => 1,
-                'fields[Leads]' => 'first_name,last_name,email1,suitesidecar_email_norm_c',
-            ]);
-            if ($existing !== null) {
-                $existingId = isset($existing['id']) ? (string) $existing['id'] : 'unknown';
-                throw new SuiteCrmConflictException('Lead already exists for email (leadId=' . $existingId . ')');
-            }
-        }
-
         $attributes = [
             'first_name' => (string) ($payload['firstName'] ?? ''),
             'last_name' => (string) ($payload['lastName'] ?? ''),
-            'email1' => $email,
+            'email1' => (string) ($payload['email'] ?? ''),
             'title' => (string) ($payload['title'] ?? ''),
             'phone_work' => (string) ($payload['phone'] ?? ''),
-            'suitesidecar_email_norm_c' => $emailNorm,
         ];
 
         $company = trim((string) ($payload['company'] ?? ''));
@@ -334,69 +233,6 @@ final class V8Adapter implements CrmAdapterInterface
         ];
     }
 
-    private function buildDescription(array $message, bool $storeBody): string
-    {
-        $lines = [];
-        $lines[] = 'Logged by SuiteSidecar Connector';
-
-        $internetMessageId = trim((string) ($message['internetMessageId'] ?? ''));
-        if ($internetMessageId !== '') {
-            $lines[] = 'Message-ID: ' . $internetMessageId;
-        }
-
-        $from = isset($message['from']) && is_array($message['from']) ? $message['from'] : [];
-        $fromEmail = trim((string) ($from['email'] ?? ''));
-        if ($fromEmail !== '') {
-            $lines[] = 'From: ' . $fromEmail;
-        }
-
-        $toAddresses = $this->collectEmails($message['to'] ?? []);
-        if ($toAddresses !== '') {
-            $lines[] = 'To: ' . $toAddresses;
-        }
-
-        $ccAddresses = $this->collectEmails($message['cc'] ?? []);
-        if ($ccAddresses !== '') {
-            $lines[] = 'Cc: ' . $ccAddresses;
-        }
-
-        $sentAt = trim((string) ($message['sentAt'] ?? ''));
-        if ($sentAt !== '') {
-            $lines[] = 'Sent: ' . $sentAt;
-        }
-
-        if ($storeBody) {
-            $bodyText = trim((string) ($message['bodyText'] ?? ''));
-            if ($bodyText !== '') {
-                $lines[] = '';
-                $lines[] = 'Body:';
-                $lines[] = $bodyText;
-            }
-        }
-
-        return substr(implode("\n", $lines), 0, 10000);
-    }
-
-    private function collectEmails(mixed $parties): string
-    {
-        if (!is_array($parties)) {
-            return '';
-        }
-
-        $emails = [];
-        foreach ($parties as $party) {
-            if (!is_array($party)) {
-                continue;
-            }
-            $email = trim((string) ($party['email'] ?? ''));
-            if ($email !== '') {
-                $emails[] = $email;
-            }
-        }
-
-        return implode(', ', $emails);
-    }
-
     private function mergeCustomFields(array &$attributes, mixed $customFields): void
     {
         if (!is_array($customFields)) {
@@ -413,27 +249,6 @@ final class V8Adapter implements CrmAdapterInterface
                 $attributes[$field] = $value;
             }
         }
-    }
-
-    private function findFirstByFilters(string $module, array $query): ?array
-    {
-        $response = $this->client->get('/Api/V8/module/' . $module, $query);
-        $data = $response['data'] ?? null;
-        if (!is_array($data) || $data === []) {
-            return null;
-        }
-
-        $firstItem = $data[0] ?? null;
-        if (!is_array($firstItem)) {
-            throw new SuiteCrmBadResponseException('SuiteCRM response is missing item data');
-        }
-
-        return $firstItem;
-    }
-
-    private function normalizeEmail(string $email): string
-    {
-        return strtolower(trim($email));
     }
 
     private function mapEntityCreateResponse(array $response, string $module, string $emailField): array

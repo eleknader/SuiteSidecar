@@ -95,40 +95,11 @@ final class MockAdapter implements CrmAdapterInterface
         return $payload;
     }
 
-    public function logEmail(array $payload): array
-    {
-        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : [];
-        $messageId = trim((string) ($message['internetMessageId'] ?? ''));
-        if ($messageId !== '' && str_contains(strtolower($messageId), 'conflict')) {
-            throw new SuiteCrmConflictException('Email already logged');
-        }
-
-        $subject = isset($message['subject']) ? trim((string) $message['subject']) : 'Email log';
-        if ($subject === '') {
-            $subject = 'Email log';
-        }
-
-        $recordId = 'mock-note-' . bin2hex(random_bytes(6));
-
-        return [
-            'loggedRecord' => [
-                'module' => 'Notes',
-                'id' => $recordId,
-                'displayName' => substr($subject, 0, 180),
-                'link' => 'https://crm.example.com/#Notes/' . $recordId,
-            ],
-            'deduplicated' => false,
-        ];
-    }
-
     public function createContact(array $payload): array
     {
         $firstName = trim((string) ($payload['firstName'] ?? ''));
         $lastName = trim((string) ($payload['lastName'] ?? ''));
         $email = trim((string) ($payload['email'] ?? ''));
-        if ($email !== '' && str_contains(strtolower($email), '+conflict')) {
-            throw new SuiteCrmConflictException('Contact already exists for email');
-        }
 
         $id = 'mock-contact-' . bin2hex(random_bytes(6));
         $displayName = trim($firstName . ' ' . $lastName);
@@ -149,9 +120,6 @@ final class MockAdapter implements CrmAdapterInterface
         $firstName = trim((string) ($payload['firstName'] ?? ''));
         $lastName = trim((string) ($payload['lastName'] ?? ''));
         $email = trim((string) ($payload['email'] ?? ''));
-        if ($email !== '' && str_contains(strtolower($email), '+conflict')) {
-            throw new SuiteCrmConflictException('Lead already exists for email');
-        }
 
         $id = 'mock-lead-' . bin2hex(random_bytes(6));
         $displayName = trim($firstName . ' ' . $lastName);

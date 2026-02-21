@@ -25,12 +25,12 @@ final class V8Client
         return $this->request('GET', $path, $query);
     }
 
-    public function post(string $path, array $jsonBody): array
+    public function post(string $path, array $payload): array
     {
-        return $this->request('POST', $path, [], $jsonBody);
+        return $this->request('POST', $path, [], $payload);
     }
 
-    private function request(string $method, string $path, array $query = [], ?array $jsonBody = null): array
+    private function request(string $method, string $path, array $query = [], ?array $payload = null): array
     {
         $token = $this->tokenProvider->getAccessToken($this->profile);
 
@@ -50,26 +50,26 @@ final class V8Client
             'User-Agent: suitesidecar-connector-php/0.1.0',
         ];
 
-        $options = [
+        $curlOptions = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 15,
+            CURLOPT_CUSTOMREQUEST => strtoupper($method),
             CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_CUSTOMREQUEST => $method,
         ];
 
-        if ($jsonBody !== null) {
-            $encodedBody = json_encode($jsonBody, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            if ($encodedBody === false) {
-                curl_close($ch);
-                throw new SuiteCrmBadResponseException('Failed to encode SuiteCRM request body');
+        if ($payload !== null) {
+            $encodedPayload = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if (!is_string($encodedPayload)) {
+                throw new SuiteCrmBadResponseException('Unable to encode SuiteCRM request payload');
             }
+
             $headers[] = 'Content-Type: application/vnd.api+json';
-            $options[CURLOPT_HTTPHEADER] = $headers;
-            $options[CURLOPT_POSTFIELDS] = $encodedBody;
+            $curlOptions[CURLOPT_HTTPHEADER] = $headers;
+            $curlOptions[CURLOPT_POSTFIELDS] = $encodedPayload;
         }
 
-        curl_setopt_array($ch, $options);
+        curl_setopt_array($ch, $curlOptions);
 
         $rawResponse = curl_exec($ch);
         if ($rawResponse === false) {

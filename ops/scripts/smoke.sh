@@ -142,18 +142,18 @@ else
   mark_fail "POST /email/log?profileId=example-dev -> ${code}" "$body" "$headers"
 fi
 
-# /entities/contacts (auth required)
+# /entities/contacts (auth required in current connector flow)
 contact_payload='{"firstName":"Smoke","lastName":"Contact","email":"smoke.contact@example.com"}'
-IFS='|' read -r code body headers < <(request "entities-contact" "POST" "/entities/contacts?profileId=example-dev" "${contact_payload}" "" "")
+IFS='|' read -r code body headers < <(request "contact-create" "POST" "/entities/contacts?profileId=example-dev" "${contact_payload}" "" "")
 if [[ "${code}" == "401" ]]; then
   mark_pass "POST /entities/contacts?profileId=example-dev -> 401"
 else
   mark_fail "POST /entities/contacts?profileId=example-dev -> ${code}" "$body" "$headers"
 fi
 
-# /entities/leads (auth required)
+# /entities/leads (auth required in current connector flow)
 lead_payload='{"firstName":"Smoke","lastName":"Lead","email":"smoke.lead@example.com"}'
-IFS='|' read -r code body headers < <(request "entities-lead" "POST" "/entities/leads?profileId=example-dev" "${lead_payload}" "" "")
+IFS='|' read -r code body headers < <(request "lead-create" "POST" "/entities/leads?profileId=example-dev" "${lead_payload}" "" "")
 if [[ "${code}" == "401" ]]; then
   mark_pass "POST /entities/leads?profileId=example-dev -> 401"
 else

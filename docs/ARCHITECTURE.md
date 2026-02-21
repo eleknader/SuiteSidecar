@@ -126,11 +126,16 @@ Add-in posts email metadata to connector:
 
 message id, subject, from/to/cc, timestamp, body preview or full body (policy-controlled)
 
-Connector creates appropriate record(s) in SuiteCRM:
+Connector creates log record(s) in SuiteCRM:
 
-Notes or Emails module depending on SuiteCRM capabilities and chosen strategy
+SuiteCRM Notes in MVP; SuiteCRM Emails may be added later as an optional strategy
 
 Connector links the record to Contact/Lead/Account via relationships.
+
+Current MVP decision:
+
+- Email logging is implemented to SuiteCRM **Notes** records.
+- SuiteCRM **Emails** module integration is out of MVP scope and treated as a later option.
 
 ### 5.3 Create Contact/Lead
 
@@ -209,6 +214,13 @@ Token storage:
 encrypted at rest (file or DB; initial: filesystem with strict perms)
 
 No SuiteCRM credentials stored in the add-in.
+
+Current implementation (Q1 2026):
+
+- Connector session state is stored as JSON files under `connector-php/var/sessions/<subjectId>.json`.
+- Each session stores connector subject/profile plus SuiteCRM `access_token`, `refresh_token`, and token expiry.
+- OAuth client-credential tokens are cached under `connector-php/var/tokens/<profileId>.json`.
+- Runtime storage is server-local, excluded from git, and must be protected with strict filesystem permissions.
 
 ### 7.4 Permissions
 
@@ -310,7 +322,7 @@ Display person card + minimal related info
 
 Create Contact/Lead (prefill)
 
-Log email metadata (without attachments initially)
+Log email metadata as SuiteCRM Notes (without attachments initially)
 
 Multi-instance profiles (basic)
 
@@ -333,10 +345,6 @@ Optional SSO / Microsoft identity integration
 ## 12. Open Questions
 
 Which SuiteCRM module to use for email logging by default (Notes vs Emails)?
-
-Exact strategy for identifying message uniqueness (internetMessageId availability across hosts).
-
-Token storage mechanism: file vs DB vs SuiteCRM custom table.
 
 Minimum supported Outlook clients (new Outlook vs classic vs Mac differences).
 
@@ -432,28 +440,36 @@ Duplicate prevention is critical because:
 - ItemChanged event may fire multiple times.
 - Users may click "Log Email" repeatedly.
 
-#### Primary deduplication key
+#### Planned uniqueness key strategy
 
-`internetMessageId` (RFC822 Message-ID)
+Primary key (target implementation):
+
+- `profileId + internetMessageId`
+- Persisted in dedicated custom fields on the logged record (for example:
+  `suitesidecar_message_id_c` + `suitesidecar_profile_id_c`)
 
 Connector logic:
 
-1. On log request:
-   - Query Notes where `external_message_id_c == internetMessageId`
-2. If found:
-   - Return existing record
-   - Set `deduplicated = true`
-3. If not found:
-   - Create new Note
+1. On log request, normalize incoming message identifiers.
+2. Query existing logs for the same `profileId + internetMessageId`.
+3. If found, return existing record with `deduplicated = true`.
+4. Otherwise create a new log record.
 
-#### Fallback
+#### Fallback when Message-ID is unavailable
 
-If `internetMessageId` is not available:
-- Use combination hash:
-  - subject
-  - from.email
-  - sentAt
-- Hash stored in `external_message_id_c`
+If `internetMessageId` is missing on a host/client:
+
+- Build a deterministic fingerprint from:
+  - normalized sender
+  - normalized recipients
+  - normalized subject
+  - sentAt (rounded to minute precision)
+- Store fingerprint in the same uniqueness fields and apply the same lookup-first flow.
+
+#### Indexing plan
+
+- Index uniqueness fields in SuiteCRM for performance and race-risk reduction.
+- If feasible in a target deployment, enforce uniqueness at DB/index level in addition to connector checks.
 
 ---
 
