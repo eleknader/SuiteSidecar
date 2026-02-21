@@ -183,18 +183,67 @@ final class V8Adapter implements CrmAdapterInterface
 
     private function findExistingLoggedEmail(string $messageKey): ?array
     {
-        $response = $this->client->get('/Api/V8/module/Notes', [
-            'filter[suitesidecar_message_id_c][eq]' => $messageKey,
+        $common = [
             'page[size]' => 5,
             'fields[Notes]' => 'name,suitesidecar_message_id_c,suitesidecar_profile_id_c',
-        ]);
+        ];
 
-        $data = $response['data'] ?? null;
-        if (!is_array($data) || $data === []) {
-            return null;
+        $queryVariants = [
+            [
+                'filter[suitesidecar_message_id_c][eq]' => $messageKey,
+                'filter[suitesidecar_profile_id_c][eq]' => $this->profile->id,
+            ],
+            [
+                'filter[0][suitesidecar_message_id_c][eq]' => $messageKey,
+                'filter[1][suitesidecar_profile_id_c][eq]' => $this->profile->id,
+            ],
+            [
+                'filter[suitesidecar_message_id_c]' => $messageKey,
+                'filter[suitesidecar_profile_id_c]' => $this->profile->id,
+            ],
+            [
+                'filter[0][suitesidecar_message_id_c]' => $messageKey,
+                'filter[1][suitesidecar_profile_id_c]' => $this->profile->id,
+            ],
+            // Fallback: message-only filters in case profile field isn't filterable on target.
+            [
+                'filter[suitesidecar_message_id_c][eq]' => $messageKey,
+            ],
+            [
+                'filter[0][suitesidecar_message_id_c][eq]' => $messageKey,
+            ],
+            [
+                'filter[suitesidecar_message_id_c]' => $messageKey,
+            ],
+        ];
+
+        foreach ($queryVariants as $queryVariant) {
+            try {
+                $response = $this->client->get('/Api/V8/module/Notes', $common + $queryVariant);
+            } catch (SuiteCrmHttpException $e) {
+                if ($e->getStatus() === 400) {
+                    continue;
+                }
+                throw $e;
+            }
+
+            $data = $response['data'] ?? null;
+            if (!is_array($data) || $data === []) {
+                continue;
+            }
+
+            $existing = $this->findMatchingExistingNote($data, $messageKey);
+            if ($existing !== null) {
+                return $existing;
+            }
         }
 
-        foreach ($data as $item) {
+        return null;
+    }
+
+    private function findMatchingExistingNote(array $items, string $messageKey): ?array
+    {
+        foreach ($items as $item) {
             if (!is_array($item)) {
                 continue;
             }
@@ -206,6 +255,11 @@ final class V8Adapter implements CrmAdapterInterface
 
             $attributes = $item['attributes'] ?? [];
             if (!is_array($attributes)) {
+                continue;
+            }
+
+            $itemMessageKey = trim((string) ($attributes['suitesidecar_message_id_c'] ?? ''));
+            if ($itemMessageKey !== '' && $itemMessageKey !== $messageKey) {
                 continue;
             }
 
@@ -229,6 +283,7 @@ final class V8Adapter implements CrmAdapterInterface
     private function buildMessageKey(string $internetMessageId): string
     {
         $normalizedMessageId = preg_replace('/\s+/', '', strtolower(trim($internetMessageId)));
+        $normalizedMessageId = trim((string) $normalizedMessageId, '<>');
         return substr((string) $normalizedMessageId, 0, 191);
     }
 

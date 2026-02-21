@@ -450,6 +450,7 @@ Primary key (implemented now):
 Connector logic:
 
 1. On log request, normalize incoming message identifiers.
+   Current normalization trims whitespace, lowercases, and removes wrapping `< >`.
 2. Query existing logs for the same `profileId + internetMessageId`.
 3. If found, return `409 conflict` (`error.code = "conflict"`).
 4. Otherwise create a new Note record.
