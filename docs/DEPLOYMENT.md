@@ -144,6 +144,29 @@ curl -sS -o /dev/null -w "%{http_code}\n" \
 For `suitecrm_v8_jsonapi` profiles, the connector creates a SuiteCRM `Notes` record and links it to `linkTo`.
 If SuiteCRM is unreachable, the connector returns a structured error response.
 
+Conflict mapping examples (returns `409` when dedup condition is met):
+
+```bash
+curl -sS -X POST "${BASE_URL}/entities/contacts?profileId=mock-dev" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"firstName":"Dup","lastName":"Contact","email":"dup+conflict@example.com"}'
+
+curl -sS -X POST "${BASE_URL}/email/log?profileId=mock-dev" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "internetMessageId": "<conflict@mail.example.com>",
+      "subject": "Duplicate log",
+      "from": {"email": "sender@example.com"},
+      "to": [{"email": "known.user@example.com"}],
+      "sentAt": "2026-01-01T12:00:00Z"
+    },
+    "linkTo": {"module":"Contacts","id":"contact-id"}
+  }'
+```
+
 ## How to test before DNS propagation
 
 Use `--resolve` to force hostname + TLS SNI to this server IP:

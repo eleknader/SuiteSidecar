@@ -8,6 +8,7 @@ use SuiteSidecar\Http\Response;
 use SuiteSidecar\SuiteCrm\CrmAdapterInterface;
 use SuiteSidecar\SuiteCrm\SuiteCrmAuthException;
 use SuiteSidecar\SuiteCrm\SuiteCrmBadResponseException;
+use SuiteSidecar\SuiteCrm\SuiteCrmConflictException;
 use SuiteSidecar\SuiteCrm\SuiteCrmException;
 use SuiteSidecar\SuiteCrm\SuiteCrmHttpException;
 
@@ -65,12 +66,19 @@ final class EntitiesController
         } catch (SuiteCrmBadResponseException) {
             error_log('[requestId=' . Response::requestId() . '] SuiteCRM returned invalid response payload for entity create');
             Response::error('suitecrm_bad_response', 'SuiteCRM returned an invalid response', 502);
+        } catch (SuiteCrmConflictException $e) {
+            error_log('[requestId=' . Response::requestId() . '] SuiteCRM dedup conflict during entity create');
+            Response::error('conflict', $e->getMessage() !== '' ? $e->getMessage() : 'Duplicate record', 409);
         } catch (SuiteCrmHttpException $e) {
             error_log(
                 '[requestId=' . Response::requestId() . '] SuiteCRM HTTP error'
                 . ' endpoint=' . $e->getEndpoint()
                 . ' status=' . $e->getStatus()
             );
+            if ($e->getStatus() === 409) {
+                Response::error('conflict', 'Duplicate record', 409);
+                return;
+            }
             if (in_array($e->getStatus(), [401, 403], true)) {
                 Response::error('suitecrm_auth_failed', 'SuiteCRM authentication failed', 401);
                 return;
