@@ -13,11 +13,21 @@ This folder contains the Outlook taskpane MVP vertical slice.
 - Show requestId in UI errors for support
 - Auto-lookup on item change via `Office.EventType.ItemChanged` (after login)
 
-## Configured production endpoint
+## Manifest split (public-safe + local-only)
 
-- Add-in host URL: `https://suitesidecar.example.com`
-- Manifest file: `addin/manifest/suitesidecar.xml`
-- Taskpane URL in manifest: `https://suitesidecar.example.com/addin/taskpane.html`
+- Versioned manifest: `addin/manifest/suitesidecar.xml`
+  - Uses placeholder host `https://suitesidecar.example.com`
+  - Safe to publish in git
+- Local-only manifest: `addin/manifest/suitesidecar.local.xml`
+  - Contains your real host URL
+  - Gitignored via `addin/.gitignore`
+
+Create local manifest:
+
+```bash
+cd addin
+./scripts/make-local-manifest.sh https://your-real-host.example
+```
 
 ## Local static preview (browser only)
 
@@ -53,12 +63,14 @@ Published web files:
 ## Install to Outlook (sideload)
 
 1. Publish add-in assets with `bash ops/scripts/publish-addin.sh`.
-2. Ensure `https://suitesidecar.example.com/addin/taskpane.html` is reachable from the Outlook client.
-3. In Outlook on the web:
+2. Create your local manifest:
+   - `cd addin && ./scripts/make-local-manifest.sh https://your-real-host.example`
+3. Ensure `https://your-real-host.example/addin/taskpane.html` is reachable from the Outlook client.
+4. In Outlook on the web:
    - `Get Add-ins` -> `My add-ins` -> `Add a custom add-in` -> `Add from file`.
-   - Upload `dist/addin/stage/sideload/suitesidecar.xml`.
-4. Open an email in read mode and launch SuiteSidecar from the ribbon.
-5. Load profiles, login, then run lookup/create/log actions.
+   - Upload `addin/manifest/suitesidecar.local.xml`.
+5. Open an email in read mode and launch SuiteSidecar from the ribbon.
+6. Load profiles, login, then run lookup/create/log actions.
 
 ## Validation checklist
 
@@ -66,3 +78,22 @@ Published web files:
 2. `POST /auth/login` returns connector JWT.
 3. Lookup works for both found and not-found emails.
 4. `Create Contact`, `Create Lead`, and `Log Email` return success or structured errors with `requestId`.
+
+## If add-in is not visible in Outlook
+
+1. Confirm deployment target:
+   - Your mailbox user is included in the Microsoft 365 admin center deployment scope.
+2. Wait for central deployment propagation:
+   - It can take from minutes up to 24 hours.
+3. Confirm host compatibility:
+   - Open a message in **Read** mode (manifest is Message Read surface).
+   - Check the add-ins panel/ribbon in that view.
+4. Confirm manifest URLs are reachable publicly over HTTPS:
+   - `https://your-real-host.example/addin/taskpane.html`
+   - `https://your-real-host.example/addin/assets/icon-64.png`
+5. Confirm the uploaded manifest uses your real URL:
+   - Upload `suitesidecar.local.xml`, not the placeholder `suitesidecar.xml`.
+6. If still missing:
+   - remove and re-add the add-in for the mailbox
+   - sign out/in to Outlook Web/Desktop
+   - test in Outlook on the web first (fastest feedback loop)

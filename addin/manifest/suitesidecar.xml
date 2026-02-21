@@ -5,7 +5,7 @@
            xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
            xsi:type="MailApp">
   <Id>f5de4b31-6f9c-4fd8-a3aa-a80172dc5f9f</Id>
-  <Version>0.1.1.0</Version>
+  <Version>0.1.2.0</Version>
   <ProviderName>SuiteSidecar</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="SuiteSidecar"/>
