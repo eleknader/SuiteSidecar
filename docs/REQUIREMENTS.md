@@ -63,3 +63,25 @@ sudo systemctl reload apache2
 - New custom fields are visible in Studio/metadata.
 - `public/legacy/custom/modules/*/Ext/Vardefs/vardefs.ext.php` includes new definitions after QRR.
 - Connector requests still pass smoke checks (`ops/scripts/smoke.sh`).
+
+## Connector-Side Checklist (Dedup + Conflict Mapping)
+- Normalize keys before lookup/create:
+  - email-based keys -> lowercase + trim
+  - message-id key -> trim exact value from `internetMessageId`
+- `/email/log` dedup pre-check:
+  - query `Notes` by `suitesidecar_message_id_c` + `suitesidecar_profile_id_c`
+  - if existing record found, return `409 conflict` (or `200 deduplicated=true` if policy chooses reuse)
+- `/entities/contacts` and `/entities/leads` dedup pre-check:
+  - query by normalized email key (`suitesidecar_email_norm_c`)
+  - if duplicate candidate found, return `409 conflict`
+- On successful create/log, persist dedup fields in created record payload.
+- Map SuiteCRM duplicate/constraint failures to connector `409 conflict` response.
+- Keep non-duplicate upstream failures mapped as:
+  - auth -> `401` (`suitecrm_auth_failed`)
+  - bad payload from upstream -> `502` (`suitecrm_bad_response`)
+  - transport/upstream unavailable -> `502` (`suitecrm_unreachable`)
+- Include `requestId` in every conflict response.
+- Add test cases:
+  - first create/log -> success
+  - second same dedup key -> `409`
+  - profile mismatch on same message id does not collide when scoped by profile id.
