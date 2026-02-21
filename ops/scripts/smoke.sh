@@ -158,6 +158,21 @@ else
   mark_fail "POST /auth/login -> ${code}" "$body" "$headers"
 fi
 
+# /auth/logout (auth required)
+IFS='|' read -r code body headers < <(request "logout" "POST" "/auth/logout" "" "" "")
+if [[ "${code}" == "401" ]]; then
+  mark_pass "POST /auth/logout -> 401"
+elif [[ "${code}" == "404" ]]; then
+  error_code="$(php -r '$d=json_decode((string)file_get_contents($argv[1]),true); echo $d["error"]["code"] ?? "";' "$body" 2>/dev/null || true)"
+  if [[ "${error_code}" == "not_found" ]]; then
+    mark_skip "POST /auth/logout endpoint not implemented"
+  else
+    mark_fail "POST /auth/logout -> 404" "$body" "$headers"
+  fi
+else
+  mark_fail "POST /auth/logout -> ${code}" "$body" "$headers"
+fi
+
 echo "---"
 echo "Summary: PASS=${PASS_COUNT} FAIL=${FAIL_COUNT} SKIP=${SKIP_COUNT}"
 

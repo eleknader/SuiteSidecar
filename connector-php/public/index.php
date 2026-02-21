@@ -135,6 +135,41 @@ try {
             Response::error('server_error', 'Internal server error', 500);
         }
     });
+    $router->post('/auth/logout', static function () use (
+        $buildJwtService,
+        $readHeaders,
+        $sessionStore
+    ): void {
+        $jwtService = $buildJwtService();
+        if ($jwtService === null) {
+            Response::error('server_error', 'Authentication service is not configured', 500);
+            return;
+        }
+
+        try {
+            $headers = $readHeaders();
+            $authMiddleware = new AuthMiddleware($jwtService, $sessionStore);
+            $authContext = $authMiddleware->requireAuth($headers);
+            if ($authContext === null) {
+                return;
+            }
+
+            $claims = isset($authContext['claims']) && is_array($authContext['claims']) ? $authContext['claims'] : [];
+            $subjectId = isset($claims['sub']) ? (string) $claims['sub'] : '';
+            if ($subjectId === '') {
+                Response::error('unauthorized', 'Invalid token subject', 401);
+                return;
+            }
+
+            $sessionStore->delete($subjectId);
+
+            http_response_code(204);
+            header('X-Request-Id: ' . Response::requestId());
+        } catch (AuthException $e) {
+            error_log('[requestId=' . Response::requestId() . '] Logout failed: ' . $e->getMessage());
+            Response::error('server_error', 'Internal server error', 500);
+        }
+    });
     $router->get('/lookup/by-email', static function () use (
         $buildJwtService,
         $readHeaders,

@@ -44,6 +44,18 @@ final class SessionStore
         return is_array($decoded) ? $decoded : null;
     }
 
+    public function delete(string $subjectId): void
+    {
+        $sessionFile = $this->sessionFile($subjectId);
+        if (!is_file($sessionFile)) {
+            return;
+        }
+
+        if (!unlink($sessionFile)) {
+            throw new AuthException('Unable to delete session');
+        }
+    }
+
     private function sessionFile(string $subjectId): string
     {
         $safeSubject = preg_replace('/[^A-Za-z0-9._-]+/', '_', $subjectId);

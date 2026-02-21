@@ -115,6 +115,10 @@ curl -sS -X POST "${BASE_URL}/email/log?profileId=example-dev" \
       "id": "contact-id"
     }
   }'
+
+curl -sS -o /dev/null -w "%{http_code}\n" \
+  -X POST "${BASE_URL}/auth/logout" \
+  -H "Authorization: Bearer ${TOKEN}"
 ```
 
 For `suitecrm_v8_jsonapi` profiles, the connector creates a SuiteCRM `Notes` record and links it to `linkTo`.
@@ -174,4 +178,9 @@ curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
       "id": "contact-id"
     }
   }'
+
+curl -sS --resolve ${HOSTNAME}:443:${SERVER_IP} \
+  -o /dev/null -w "%{http_code}\n" \
+  -X POST "https://${HOSTNAME}/auth/logout" \
+  -H "Authorization: Bearer ${TOKEN}"
 ```
