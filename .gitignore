@@ -8,3 +8,5 @@ vendor/
 suitesidecar.code-workspace
 AGENTS.local.md
 ROADMAP.local.md
+connector-php/.env
+connector-php/.env.local

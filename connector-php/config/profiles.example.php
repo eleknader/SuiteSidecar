@@ -11,8 +11,9 @@ return [
         'apiFlavor' => 'suitecrm_v8_jsonapi',
         'oauth' => [
             'tokenUrl' => 'https://crm.example.com/legacy/Api/access_token',
-            'clientId' => 'your-client-id',
-            'clientSecret' => 'your-client-secret',
+            // Keep credentials in env vars, not in this file.
+            'clientId' => '',
+            'clientSecret' => '',
             'grantType' => 'client_credentials',
         ],
     ],

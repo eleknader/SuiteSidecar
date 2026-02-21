@@ -19,6 +19,23 @@ Install server-local secrets file and permissions:
 sudo ops/scripts/env-install.sh
 ```
 
+For local `php -S` development (without Apache envvars), use a gitignored local env file:
+
+```bash
+cp connector-php/.env.example connector-php/.env
+chmod 600 connector-php/.env
+# then fill SUITESIDECAR_* values in connector-php/.env
+```
+
+The connector bootstrap loads `connector-php/.env` automatically if present.
+
+If connector runs behind Apache as `www-data`, make sure `.env` is readable by that user:
+
+```bash
+chgrp www-data connector-php/.env
+chmod 640 connector-php/.env
+```
+
 Run one-command smoke checks against local Apache (with `--resolve`):
 
 ```bash
@@ -59,6 +76,49 @@ General pattern:
 SUITESIDECAR_<PROFILEID_NORMALIZED>_CLIENT_ID
 SUITESIDECAR_<PROFILEID_NORMALIZED>_CLIENT_SECRET
 ```
+
+Credential precedence:
+
+1. environment variables (`SUITESIDECAR_*`)
+2. fallback values in `config/profiles.php`
+
+Recommended: keep `oauth.clientId` and `oauth.clientSecret` empty in `config/profiles.php`
+and store real credentials only in env files.
+
+Profile URL rule for SuiteCRM v8:
+
+- `suitecrmBaseUrl` must be CRM root URL (example: `https://crmdev.tapsa.duckdns.org`)
+- `tokenUrl` should be `https://<host>/legacy/Api/access_token`
+- do not set `suitecrmBaseUrl` to `/legacy`
+
+## OAuth troubleshooting (invalid_client / unauthorized)
+
+If SuiteCRM token calls fail with `invalid_client` or connector login returns unauthorized:
+
+1. Confirm profile id normalization:
+   - `example-dev` -> `EXAMPLE_DEV`
+   - expected env keys:
+     - `SUITESIDECAR_EXAMPLE_DEV_CLIENT_ID`
+     - `SUITESIDECAR_EXAMPLE_DEV_CLIENT_SECRET`
+2. Verify secrets are loaded in the runtime:
+   - Apache mode: check `/etc/suitesidecar/suitesidecar.env`, then reload Apache.
+   - local `php -S` mode: check `connector-php/.env`.
+3. Test token endpoint directly with current credentials:
+
+```bash
+source /etc/suitesidecar/suitesidecar.env
+curl -sS -i -X POST "https://crm.example.com/legacy/Api/access_token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=password" \
+  --data-urlencode "client_id=${SUITESIDECAR_EXAMPLE_DEV_CLIENT_ID}" \
+  --data-urlencode "client_secret=${SUITESIDECAR_EXAMPLE_DEV_CLIENT_SECRET}" \
+  --data-urlencode "username=<suitecrm-user>" \
+  --data-urlencode "password=<suitecrm-password>"
+```
+
+Expected result: HTTP `200` with `access_token`.  
+If HTTP `401 invalid_client`: client id/secret pair is wrong or not loaded by runtime.
+If HTTP `404`: token URL/host is wrong (common cause: wrong host or wrong base path).
 
 ## Connector JWT secret
 
@@ -166,6 +226,25 @@ curl -sS -X POST "${BASE_URL}/email/log?profileId=mock-dev" \
     "linkTo": {"module":"Contacts","id":"contact-id"}
   }'
 ```
+
+## Verified pre-DNS flow example
+
+```bash
+TOKEN=$(
+curl -sS --resolve suitesidecar.example.com:443:127.0.0.1 \
+  -X POST https://suitesidecar.example.com/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"profileId":"example-dev","username":"admin","password":"<password>"}' \
+  | jq -r '.token'
+)
+
+curl -sS --resolve suitesidecar.example.com:443:127.0.0.1 \
+  "https://suitesidecar.example.com/lookup/by-email?profileId=example-dev&email=<known-email>" \
+  -H "Authorization: Bearer ${TOKEN}" | jq
+```
+
+Expected login: token returned.  
+Expected lookup: normalized JSON response (for missing email, `notFound: true` is valid).
 
 ## How to test before DNS propagation
 

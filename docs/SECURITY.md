@@ -5,6 +5,7 @@
 - OAuth client credentials must be provided via environment variables, not hardcoded in repository files.
 - Never commit `clientId`, `clientSecret`, access tokens, or token cache files.
 - If any secret is exposed, rotate it immediately and remove leaked values from history.
+- `connector-php/.env` is local-only (gitignored) for local dev; production should use server-owned env files (for example `/etc/suitesidecar/suitesidecar.env`).
 
 ## Public-Safe vs Local-Only Split
 

@@ -7,6 +7,7 @@ use SuiteSidecar\Auth\AuthMiddleware;
 use SuiteSidecar\Auth\AuthException;
 use SuiteSidecar\Auth\JwtService;
 use SuiteSidecar\Auth\SessionStore;
+use SuiteSidecar\EnvLoader;
 use SuiteSidecar\EmailLogController;
 use SuiteSidecar\EntitiesController;
 use SuiteSidecar\Http\Router;
@@ -25,6 +26,7 @@ use SuiteSidecar\SuiteCrm\V8Client;
 use SuiteSidecar\SystemController;
 
 require_once __DIR__ . '/../vendor/autoload.php';
+EnvLoader::load(__DIR__ . '/../.env');
 
 // Default JSON
 header('Content-Type: application/json');
