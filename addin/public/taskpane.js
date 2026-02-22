@@ -1125,6 +1125,10 @@ async function tryAutoLookup(trigger) {
   const result = await runLookup({ suppressStatus: true });
   if (result) {
     setStatus('success', `Automatic lookup completed (${trigger}).`, result.requestId || '');
+    return;
+  }
+  if (!state.token) {
+    setStatus('info', `Outlook item changed (${trigger}). Login to continue automatic lookup.`);
   }
 }
 
@@ -1241,8 +1245,13 @@ async function restoreConnectionOnStartup() {
   }
 
   if (state.token) {
+    if (!hasAuthenticatedUiSession()) {
+      clearSession();
+      setStatus('info', 'Stored session is incomplete. Login to continue.');
+      return;
+    }
     updateSessionInfo();
-    setStatus('success', 'Session restored. Login not required.');
+    setStatus('info', 'Stored session restored. Authentication will be verified on first lookup.');
     if (state.officeReady) {
       scheduleAutoLookup('session_restore');
     }

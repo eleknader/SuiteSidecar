@@ -9,18 +9,20 @@
 - Timeline lookup (`include=timeline`) with working SuiteCRM deep links in format `/#/module/record/{id}`.
 - Cache-busting/versioned add-in asset URLs and no-cache hosting guidance.
 
-## v0.3 - Stabilization and Test Coverage
-- Fix UI look & feel for cleaner
-- Keep settings between sessions, restore connection automatically when opening Outlook / SuiteSidecar panel
-- Hide Connector and Login -parts when logged in and session valid
-- Hide all other panels exept Connector, Login and Status when not logged in
-- Expand automated smoke/e2e coverage for attachment and timeline scenarios.
-- Finalize release checklist for manifest/version/cache updates.
-- Complete remaining UI polish and host-specific compatibility checks.
+## v0.3 - Implemented (validated 2026-02-22)
+- Taskpane UI streamlined for Outlook classic workflow: automatic lookup path, compact panel order, and reduced non-essential controls.
+- Details panel moved below top actions and kept collapsed by default when a CRM match is found.
+- Connector/Login cards hidden when authenticated; business panels hidden while not authenticated.
+- Session/settings restore between Outlook launches, including startup auth-state messaging fix to avoid false “session restored” state.
+- Create Contact / Create Lead shown only when lookup returns `notFound=true`.
+- Attachment defaults updated to store attachments enabled and `maxAttachmentBytes=5242880` (5 MB).
+- Release/version hygiene completed in manifests and taskpane cache-busting URLs.
 
 ## v0.4 - Packaging/Deployment Hardening
 - Consolidate deployment workflow for connector + add-in.
 - Improve operational diagnostics and support runbooks.
+- Expand automated smoke/e2e coverage for attachment and timeline scenarios.
+- Document and validate alignment between add-in attachment max size and server PHP upload limits.
 
 ## v0.5 - UI/UX Refinements
 - Resolve remaining taskpane UX issues and improve status clarity.
