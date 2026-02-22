@@ -28,16 +28,18 @@ function initElements() {
     'loginBtn',
     'logoutBtn',
     'sessionInfo',
-    'hydrateFromOutlookBtn',
     'senderEmailInput',
     'subjectInput',
     'internetMessageIdInput',
     'recipientEmailsInput',
     'attachmentsInfo',
     'sentAtInput',
+    'quickActionsBar',
     'lookupBtn',
     'lookupResult',
     'timelineResult',
+    'toggleActionsBtn',
+    'actionsBody',
     'firstNameInput',
     'lastNameInput',
     'titleInput',
@@ -255,6 +257,7 @@ function refreshPanelVisibility() {
   setVisible(els.connectorCard, !authenticated);
   setVisible(els.loginCard, !authenticated);
   setVisible(els.selectedEmailCard, authenticated);
+  setVisible(els.quickActionsBar, authenticated);
   setVisible(els.lookupCard, authenticated);
   setVisible(els.actionsCard, authenticated);
   setVisible(els.sessionActionsRow, authenticated);
@@ -389,6 +392,16 @@ function defaultTimelineHintHtml() {
   return '<p class="hint">No timeline loaded.</p>';
 }
 
+function setActionsCollapsed(collapsed) {
+  if (els.actionsCard) {
+    els.actionsCard.classList.toggle('is-collapsed', collapsed);
+  }
+  if (els.toggleActionsBtn) {
+    els.toggleActionsBtn.setAttribute('aria-expanded', String(!collapsed));
+    els.toggleActionsBtn.textContent = collapsed ? 'Details' : 'Hide Details';
+  }
+}
+
 function buildOutlookContextKey(context) {
   if (!context) {
     return '';
@@ -407,7 +420,9 @@ function resetActionsForContext(context) {
   els.lookupResult.innerHTML = defaultLookupHintHtml();
   if (els.timelineResult) {
     els.timelineResult.innerHTML = defaultTimelineHintHtml();
+    setVisible(els.timelineResult, false);
   }
+  setActionsCollapsed(true);
   els.firstNameInput.value = names.firstName;
   els.lastNameInput.value = names.lastName;
   els.titleInput.value = '';
@@ -824,6 +839,13 @@ async function runLookup(options = {}) {
     els.lookupResult.innerHTML = formatLookup(result.payload);
     if (els.timelineResult) {
       els.timelineResult.innerHTML = formatTimeline(result.payload);
+      setVisible(els.timelineResult, true);
+    }
+
+    if (result.payload && result.payload.notFound) {
+      setActionsCollapsed(false);
+    } else {
+      setActionsCollapsed(true);
     }
 
     if (result.payload && !result.payload.notFound && result.payload.match && result.payload.match.person) {
@@ -1146,7 +1168,12 @@ function wireEvents() {
   els.createContactBtn.addEventListener('click', createContact);
   els.createLeadBtn.addEventListener('click', createLead);
   els.logEmailBtn.addEventListener('click', logEmail);
-  els.hydrateFromOutlookBtn.addEventListener('click', hydrateFromOutlook);
+  if (els.toggleActionsBtn) {
+    els.toggleActionsBtn.addEventListener('click', () => {
+      const currentlyCollapsed = Boolean(els.actionsCard && els.actionsCard.classList.contains('is-collapsed'));
+      setActionsCollapsed(!currentlyCollapsed);
+    });
+  }
   els.usernameInput.addEventListener('change', persistSession);
   if (els.statusLogoutBtn) {
     els.statusLogoutBtn.addEventListener('click', logout);
@@ -1212,6 +1239,10 @@ function init() {
   if (els.attachmentsInfo && !els.attachmentsInfo.textContent) {
     els.attachmentsInfo.textContent = 'Attachments: none';
   }
+  if (els.timelineResult) {
+    setVisible(els.timelineResult, false);
+  }
+  setActionsCollapsed(true);
 
   if (!els.connectorBaseUrl.value) {
     els.connectorBaseUrl.value = DEFAULT_CONNECTOR_BASE_URL;
@@ -1226,7 +1257,7 @@ function init() {
     Office.onReady(() => {
       state.officeReady = true;
       if (!state.token) {
-        setStatus('info', 'Office runtime detected. You can use selected email context.');
+        setStatus('info', 'Office runtime detected. Email context sync is active.');
       }
       registerItemChangedHandler();
     });
