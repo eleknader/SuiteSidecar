@@ -402,6 +402,11 @@ function setActionsCollapsed(collapsed) {
   }
 }
 
+function setCreateActionsVisible(visible) {
+  setVisible(els.createContactBtn, visible);
+  setVisible(els.createLeadBtn, visible);
+}
+
 function buildOutlookContextKey(context) {
   if (!context) {
     return '';
@@ -423,6 +428,7 @@ function resetActionsForContext(context) {
     setVisible(els.timelineResult, false);
   }
   setActionsCollapsed(true);
+  setCreateActionsVisible(false);
   els.firstNameInput.value = names.firstName;
   els.lastNameInput.value = names.lastName;
   els.titleInput.value = '';
@@ -802,6 +808,14 @@ async function logout(options = {}) {
   }
 }
 
+function confirmAndLogout() {
+  const shouldConfirm = typeof window !== 'undefined' && typeof window.confirm === 'function';
+  if (shouldConfirm && !window.confirm('Log out from current SuiteSidecar session?')) {
+    return;
+  }
+  void logout();
+}
+
 function buildLookupEmail() {
   const sender = String(els.senderEmailInput.value || '').trim();
   return sender;
@@ -809,6 +823,7 @@ function buildLookupEmail() {
 
 async function runLookup(options = {}) {
   const suppressStatus = options.suppressStatus === true;
+  setCreateActionsVisible(false);
 
   if (!ensureAuthenticated('lookup', { suppressStatus })) {
     return null;
@@ -844,8 +859,10 @@ async function runLookup(options = {}) {
 
     if (result.payload && result.payload.notFound) {
       setActionsCollapsed(false);
+      setCreateActionsVisible(true);
     } else {
       setActionsCollapsed(true);
+      setCreateActionsVisible(false);
     }
 
     if (result.payload && !result.payload.notFound && result.payload.match && result.payload.match.person) {
@@ -868,6 +885,7 @@ async function runLookup(options = {}) {
     }
     return result;
   } catch (error) {
+    setCreateActionsVisible(false);
     if (!suppressStatus) {
       setStatus('error', `Lookup failed: ${error.message}`, error.requestId || '');
     }
@@ -1163,7 +1181,7 @@ function registerItemChangedHandler() {
 function wireEvents() {
   els.loadProfilesBtn.addEventListener('click', loadProfiles);
   els.loginBtn.addEventListener('click', login);
-  els.logoutBtn.addEventListener('click', logout);
+  els.logoutBtn.addEventListener('click', confirmAndLogout);
   els.lookupBtn.addEventListener('click', runLookup);
   els.createContactBtn.addEventListener('click', createContact);
   els.createLeadBtn.addEventListener('click', createLead);
@@ -1176,7 +1194,7 @@ function wireEvents() {
   }
   els.usernameInput.addEventListener('change', persistSession);
   if (els.statusLogoutBtn) {
-    els.statusLogoutBtn.addEventListener('click', logout);
+    els.statusLogoutBtn.addEventListener('click', confirmAndLogout);
   }
 
   els.profileSelect.addEventListener('change', () => {
@@ -1243,6 +1261,7 @@ function init() {
     setVisible(els.timelineResult, false);
   }
   setActionsCollapsed(true);
+  setCreateActionsVisible(false);
 
   if (!els.connectorBaseUrl.value) {
     els.connectorBaseUrl.value = DEFAULT_CONNECTOR_BASE_URL;

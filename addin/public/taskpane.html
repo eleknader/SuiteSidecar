@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SuiteSidecar</title>
-    <link rel="stylesheet" href="./taskpane.css?v=0.2.3" />
+    <link rel="stylesheet" href="./taskpane.css?v=0.2.4" />
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script defer src="./taskpane.js?v=0.2.3"></script>
+    <script defer src="./taskpane.js?v=0.2.4"></script>
   </head>
   <body>
     <main class="app-shell">
@@ -38,6 +38,26 @@
         <p id="sessionInfo" class="hint"></p>
       </section>
 
+      <section id="quickActionsBar" class="quick-actions is-hidden">
+        <div class="row wrap">
+          <button id="lookupBtn" type="button">Lookup</button>
+          <button id="createContactBtn" class="is-hidden" type="button">Create Contact</button>
+          <button id="createLeadBtn" class="is-hidden" type="button">Create Lead</button>
+          <button id="logEmailBtn" type="button">Log Email</button>
+          <button id="toggleActionsBtn" type="button" aria-controls="actionsCard" aria-expanded="false">Details</button>
+        </div>
+      </section>
+
+      <section id="lookupCard" class="card">
+        <h2>Lookup</h2>
+        <div id="lookupResult" class="result-box">
+          <p class="hint">No lookup executed yet.</p>
+        </div>
+        <div id="timelineResult" class="result-box timeline-box is-hidden">
+          <p class="hint">No timeline loaded.</p>
+        </div>
+      </section>
+
       <section id="selectedEmailCard" class="card">
         <h2>Selected Email</h2>
         <label for="senderEmailInput">Sender Email</label>
@@ -55,26 +75,6 @@
 
         <label for="sentAtInput">Sent At (UTC)</label>
         <input id="sentAtInput" type="datetime-local" />
-      </section>
-
-      <section id="quickActionsBar" class="quick-actions is-hidden">
-        <div class="row wrap">
-          <button id="lookupBtn" type="button">Lookup</button>
-          <button id="createContactBtn" type="button">Create Contact</button>
-          <button id="createLeadBtn" type="button">Create Lead</button>
-          <button id="logEmailBtn" type="button">Log Email</button>
-          <button id="toggleActionsBtn" type="button" aria-controls="actionsCard" aria-expanded="false">Details</button>
-        </div>
-      </section>
-
-      <section id="lookupCard" class="card">
-        <h2>Lookup</h2>
-        <div id="lookupResult" class="result-box">
-          <p class="hint">No lookup executed yet.</p>
-        </div>
-        <div id="timelineResult" class="result-box timeline-box is-hidden">
-          <p class="hint">No timeline loaded.</p>
-        </div>
       </section>
 
       <section id="actionsCard" class="card is-collapsed">
