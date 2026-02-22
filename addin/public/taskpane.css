@@ -40,6 +40,18 @@ body {
   margin-bottom: 8px;
 }
 
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.card-head h2 {
+  margin: 0;
+}
+
 .quick-actions {
   position: sticky;
   top: 0;

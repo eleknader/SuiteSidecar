@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SuiteSidecar</title>
-    <link rel="stylesheet" href="./taskpane.css?v=0.2.4" />
+    <link rel="stylesheet" href="./taskpane.css?v=0.2.5" />
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script defer src="./taskpane.js?v=0.2.4"></script>
+    <script defer src="./taskpane.js?v=0.2.5"></script>
   </head>
   <body>
     <main class="app-shell">
@@ -40,46 +40,21 @@
 
       <section id="quickActionsBar" class="quick-actions is-hidden">
         <div class="row wrap">
-          <button id="lookupBtn" type="button">Lookup</button>
-          <button id="createContactBtn" class="is-hidden" type="button">Create Contact</button>
-          <button id="createLeadBtn" class="is-hidden" type="button">Create Lead</button>
           <button id="logEmailBtn" type="button">Log Email</button>
-          <button id="toggleActionsBtn" type="button" aria-controls="actionsCard" aria-expanded="false">Details</button>
         </div>
-      </section>
-
-      <section id="lookupCard" class="card">
-        <h2>Lookup</h2>
-        <div id="lookupResult" class="result-box">
-          <p class="hint">No lookup executed yet.</p>
-        </div>
-        <div id="timelineResult" class="result-box timeline-box is-hidden">
-          <p class="hint">No timeline loaded.</p>
-        </div>
-      </section>
-
-      <section id="selectedEmailCard" class="card">
-        <h2>Selected Email</h2>
-        <label for="senderEmailInput">Sender Email</label>
-        <input id="senderEmailInput" type="email" placeholder="sender@example.com" />
-
-        <label for="subjectInput">Subject</label>
-        <input id="subjectInput" type="text" placeholder="Email subject" />
-
-        <label for="internetMessageIdInput">Internet Message ID</label>
-        <input id="internetMessageIdInput" type="text" placeholder="<message-id@example.com>" />
-
-        <label for="recipientEmailsInput">Recipients</label>
-        <input id="recipientEmailsInput" type="text" placeholder="recipient@example.com" />
-        <p id="attachmentsInfo" class="hint"></p>
-
-        <label for="sentAtInput">Sent At (UTC)</label>
-        <input id="sentAtInput" type="datetime-local" />
       </section>
 
       <section id="actionsCard" class="card is-collapsed">
-        <h2>Details</h2>
+        <div class="card-head">
+          <h2>Details</h2>
+          <button id="toggleActionsBtn" type="button" aria-controls="actionsCard" aria-expanded="false">Details</button>
+        </div>
         <div id="actionsBody" class="card-body">
+          <div class="row wrap">
+            <button id="createContactBtn" class="is-hidden" type="button">Create Contact</button>
+            <button id="createLeadBtn" class="is-hidden" type="button">Create Lead</button>
+          </div>
+
           <label for="firstNameInput">First Name</label>
           <input id="firstNameInput" type="text" placeholder="First name" />
 
@@ -110,13 +85,42 @@
           </label>
 
           <label class="checkbox-row">
-            <input id="storeAttachmentsCheckbox" type="checkbox" />
+            <input id="storeAttachmentsCheckbox" type="checkbox" checked />
             <span>Store attachments (subject to max size)</span>
           </label>
 
           <label for="maxAttachmentBytesInput">Max Attachment Bytes</label>
-          <input id="maxAttachmentBytesInput" type="number" min="1" step="1" value="1048576" />
+          <input id="maxAttachmentBytesInput" type="number" min="1" step="1" value="5242880" />
         </div>
+      </section>
+
+      <section id="lookupCard" class="card">
+        <h2>Lookup</h2>
+        <div id="lookupResult" class="result-box">
+          <p class="hint">No lookup executed yet.</p>
+        </div>
+        <div id="timelineResult" class="result-box timeline-box is-hidden">
+          <p class="hint">No timeline loaded.</p>
+        </div>
+      </section>
+
+      <section id="selectedEmailCard" class="card">
+        <h2>Selected Email</h2>
+        <label for="senderEmailInput">Sender Email</label>
+        <input id="senderEmailInput" type="email" placeholder="sender@example.com" />
+
+        <label for="subjectInput">Subject</label>
+        <input id="subjectInput" type="text" placeholder="Email subject" />
+
+        <label for="internetMessageIdInput">Internet Message ID</label>
+        <input id="internetMessageIdInput" type="text" placeholder="<message-id@example.com>" />
+
+        <label for="recipientEmailsInput">Recipients</label>
+        <input id="recipientEmailsInput" type="text" placeholder="recipient@example.com" />
+        <p id="attachmentsInfo" class="hint"></p>
+
+        <label for="sentAtInput">Sent At (UTC)</label>
+        <input id="sentAtInput" type="datetime-local" />
       </section>
 
       <section id="statusBox" class="status status-info">

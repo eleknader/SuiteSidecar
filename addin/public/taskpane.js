@@ -35,7 +35,6 @@ function initElements() {
     'attachmentsInfo',
     'sentAtInput',
     'quickActionsBar',
-    'lookupBtn',
     'lookupResult',
     'timelineResult',
     'toggleActionsBtn',
@@ -771,6 +770,12 @@ async function login() {
     persistSession();
     updateSessionInfo();
     setStatus('success', 'Login successful.', result.requestId || '');
+
+    if (state.officeReady) {
+      scheduleAutoLookup('login');
+    } else {
+      Promise.resolve(runLookup({ suppressStatus: true })).catch(() => {});
+    }
   } catch (error) {
     clearSession();
     setStatus('error', `Login failed: ${error.message}`, error.requestId || '');
@@ -1182,7 +1187,6 @@ function wireEvents() {
   els.loadProfilesBtn.addEventListener('click', loadProfiles);
   els.loginBtn.addEventListener('click', login);
   els.logoutBtn.addEventListener('click', confirmAndLogout);
-  els.lookupBtn.addEventListener('click', runLookup);
   els.createContactBtn.addEventListener('click', createContact);
   els.createLeadBtn.addEventListener('click', createLead);
   els.logEmailBtn.addEventListener('click', logEmail);

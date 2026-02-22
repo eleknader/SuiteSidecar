@@ -392,8 +392,9 @@ Validation after sideload:
 
 1. Click `Load Profiles`.
 2. Login with SuiteCRM user credentials.
-3. Trigger lookup with a known sender email.
+3. Open a known sender email and confirm automatic lookup runs.
 4. Test `Create Contact`, `Create Lead`, and `Log Email`.
-5. For failures, capture `requestId` shown in the add-in status box.
+5. Add-in default for `maxAttachmentBytes` is `5242880` (5 MB). Ensure PHP `upload_max_filesize` and `post_max_size` are aligned if attachment limits are changed.
+6. For failures, capture `requestId` shown in the add-in status box.
 
 For requestId-based incident handling, see `docs/SUPPORT.md`.
