@@ -153,9 +153,9 @@ export SUITESIDECAR_JWT_TTL_SECONDS="28800"
 Optional version metadata surfaced in `/version`:
 
 ```bash
-export APP_VERSION="0.3.6.0"
-export SUITESIDECAR_ADDIN_MANIFEST_VERSION="0.3.6.0"
-export SUITESIDECAR_ADDIN_ASSET_VERSION="0.3.6"
+export APP_VERSION="0.3.7.0"
+export SUITESIDECAR_ADDIN_MANIFEST_VERSION="0.3.7.0"
+export SUITESIDECAR_ADDIN_ASSET_VERSION="0.3.7"
 ```
 
 ## API smoke tests (normal DNS path)

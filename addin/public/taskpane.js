@@ -645,6 +645,7 @@ function resetActionsForContext(context) {
   setButtonEnabled(els.createCallBtn, false);
   setButtonEnabled(els.createMeetingBtn, false);
   setButtonEnabled(els.createTaskBtn, false);
+  setButtonEnabled(els.logEmailBtn, false);
   setTaskActionHtml('');
   els.firstNameInput.value = names.firstName;
   els.lastNameInput.value = names.lastName;
@@ -838,16 +839,35 @@ function lookupActivityLink(kind, payload = state.lastLookup) {
   return '';
 }
 
+function hasSavedContactOrLead(payload = state.lastLookup) {
+  const person = lookupPerson(payload);
+  const personModule = person && person.module ? String(person.module).trim() : '';
+  const personId = person && person.id ? String(person.id).trim() : '';
+  if ((personModule === 'Contacts' || personModule === 'Leads') && personId) {
+    return true;
+  }
+
+  const linkModule = String(els.linkModuleSelect ? els.linkModuleSelect.value : '').trim();
+  const linkId = String(els.linkIdInput ? els.linkIdInput.value : '').trim();
+  if (!linkId) {
+    return false;
+  }
+
+  return linkModule === 'Contacts' || linkModule === 'Leads';
+}
+
 function updateQuickActionState() {
   const person = lookupPerson();
   const callLink = lookupActivityLink('call');
   const meetingLink = lookupActivityLink('meeting');
+  const hasSavedPerson = hasSavedContactOrLead();
   const senderEmail = String(els.senderEmailInput ? els.senderEmailInput.value : '').trim();
   const subject = String(els.subjectInput ? els.subjectInput.value : '').trim();
 
   setButtonEnabled(els.createCallBtn, Boolean(person && callLink));
   setButtonEnabled(els.createMeetingBtn, Boolean(person && meetingLink));
-  setButtonEnabled(els.createTaskBtn, Boolean(senderEmail && subject));
+  setButtonEnabled(els.createTaskBtn, Boolean(hasSavedPerson && senderEmail && subject));
+  setButtonEnabled(els.logEmailBtn, Boolean(hasSavedPerson));
 }
 
 function formatOpportunityMeta(item) {
@@ -1407,6 +1427,10 @@ async function createTaskFromEmail() {
   if (!ensureAuthenticated('creating task')) {
     return;
   }
+  if (!hasSavedContactOrLead()) {
+    setStatus('warning', 'Save or select a Contact/Lead first.');
+    return;
+  }
 
   const payload = buildTaskCreatePayload();
   if (!payload.message.from.email || !payload.message.subject || !payload.message.receivedDateTime) {
@@ -1444,6 +1468,24 @@ async function createTaskFromEmail() {
   }
 }
 
+async function refreshLookupAfterEntityCreate(entityLabel, displayName, requestId = '') {
+  const label = String(entityLabel || 'Record').trim();
+  const name = String(displayName || 'ok').trim();
+  const baseMessage = `${label} created: ${name}`;
+
+  try {
+    const lookupResult = await runLookup({ suppressStatus: true });
+    if (lookupResult && lookupResult.payload && !lookupResult.payload.notFound) {
+      setStatus('success', `${baseMessage}. Lookup refreshed.`, requestId || lookupResult.requestId || '');
+      return;
+    }
+
+    setStatus('success', `${baseMessage}.`, requestId || '');
+  } catch {
+    setStatus('success', `${baseMessage}.`, requestId || '');
+  }
+}
+
 async function createContact() {
   if (!ensureAuthenticated('creating contact')) {
     return;
@@ -1469,7 +1511,8 @@ async function createContact() {
     const rec = result.payload || {};
     els.linkModuleSelect.value = rec.module || 'Contacts';
     els.linkIdInput.value = rec.id || '';
-    setStatus('success', `Contact created: ${rec.displayName || rec.id || 'ok'}`, result.requestId || '');
+    updateQuickActionState();
+    await refreshLookupAfterEntityCreate('Contact', rec.displayName || rec.id || 'ok', result.requestId || '');
   } catch (error) {
     setStatus('error', `Create Contact failed: ${error.message}`, error.requestId || '');
   }
@@ -1501,7 +1544,8 @@ async function createLead() {
     const rec = result.payload || {};
     els.linkModuleSelect.value = rec.module || 'Leads';
     els.linkIdInput.value = rec.id || '';
-    setStatus('success', `Lead created: ${rec.displayName || rec.id || 'ok'}`, result.requestId || '');
+    updateQuickActionState();
+    await refreshLookupAfterEntityCreate('Lead', rec.displayName || rec.id || 'ok', result.requestId || '');
   } catch (error) {
     setStatus('error', `Create Lead failed: ${error.message}`, error.requestId || '');
   }
@@ -1509,6 +1553,10 @@ async function createLead() {
 
 async function logEmail() {
   if (!ensureAuthenticated('logging email')) {
+    return;
+  }
+  if (!hasSavedContactOrLead()) {
+    setStatus('warning', 'Save or select a Contact/Lead first.');
     return;
   }
 
@@ -1814,6 +1862,12 @@ function wireEvents() {
   }
   if (els.subjectInput) {
     els.subjectInput.addEventListener('input', updateQuickActionState);
+  }
+  if (els.linkModuleSelect) {
+    els.linkModuleSelect.addEventListener('change', updateQuickActionState);
+  }
+  if (els.linkIdInput) {
+    els.linkIdInput.addEventListener('input', updateQuickActionState);
   }
 
   els.profileSelect.addEventListener('change', () => {

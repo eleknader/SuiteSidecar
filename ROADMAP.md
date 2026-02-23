@@ -34,6 +34,7 @@
 - Add lightweight Opportunities panel (`latest 5 + view all`) with profile-scoped, ACL-respecting read path.
 - Extend OpenAPI + support docs for new task/opportunity contracts and security notes.
 - Improve lookup target selection for sent items by using recipient-first matching (fallback to sender).
+- Refresh lookup panels automatically after successful `Create Contact` / `Create Lead` so saved person context is visible without taskpane reload.
 
 ## v0.5 - Host Compatibility and UX Reliability
 - Finalize supported Outlook host matrix and host-specific fallback behavior.
