@@ -23,9 +23,23 @@ final class EmailLogController
 
     public function log(): void
     {
-        $payload = $this->readJsonBody();
+        $runtimeLimits = RuntimeLimits::resolve();
+        $contentLengthBytes = RuntimeLimits::currentContentLengthBytes();
+        $maxRequestBytes = isset($runtimeLimits['maxRequestBytes']) && is_int($runtimeLimits['maxRequestBytes'])
+            ? $runtimeLimits['maxRequestBytes']
+            : null;
+        if ($maxRequestBytes !== null && $contentLengthBytes !== null && $contentLengthBytes > $maxRequestBytes) {
+            Response::error(
+                'payload_too_large',
+                'Request payload exceeds connector request size limit',
+                413,
+                $this->buildPayloadTooLargeDetails($runtimeLimits, $contentLengthBytes)
+            );
+            return;
+        }
+
+        $payload = $this->readJsonBody($runtimeLimits);
         if ($payload === null) {
-            Response::error('bad_request', 'Invalid JSON body', 400);
             return;
         }
 
@@ -143,15 +157,53 @@ final class EmailLogController
         ];
     }
 
-    private function readJsonBody(): ?array
+    private function readJsonBody(array $runtimeLimits): ?array
     {
         $rawBody = file_get_contents('php://input');
         if (!is_string($rawBody) || trim($rawBody) === '') {
+            $contentLengthBytes = RuntimeLimits::currentContentLengthBytes();
+            $maxRequestBytes = isset($runtimeLimits['maxRequestBytes']) && is_int($runtimeLimits['maxRequestBytes'])
+                ? $runtimeLimits['maxRequestBytes']
+                : null;
+            if ($contentLengthBytes !== null && $contentLengthBytes > 0 && $maxRequestBytes !== null && $contentLengthBytes > $maxRequestBytes) {
+                Response::error(
+                    'payload_too_large',
+                    'Request payload exceeds connector request size limit',
+                    413,
+                    $this->buildPayloadTooLargeDetails($runtimeLimits, $contentLengthBytes)
+                );
+                return null;
+            }
+
+            Response::error('bad_request', 'Invalid JSON body', 400);
             return null;
         }
 
         $decoded = json_decode($rawBody, true);
-        return is_array($decoded) ? $decoded : null;
+        if (!is_array($decoded)) {
+            Response::error('bad_request', 'Invalid JSON body', 400);
+            return null;
+        }
+
+        return $decoded;
+    }
+
+    private function buildPayloadTooLargeDetails(array $runtimeLimits, ?int $contentLengthBytes): array
+    {
+        $details = [
+            'contentLengthBytes' => $contentLengthBytes,
+            'maxRequestBytes' => isset($runtimeLimits['maxRequestBytes']) ? $runtimeLimits['maxRequestBytes'] : null,
+            'maxAttachmentBytes' => isset($runtimeLimits['maxAttachmentBytes']) ? $runtimeLimits['maxAttachmentBytes'] : null,
+            'phpPostMaxBytes' => isset($runtimeLimits['phpPostMaxBytes']) ? $runtimeLimits['phpPostMaxBytes'] : null,
+            'phpUploadMaxFileSizeBytes' => isset($runtimeLimits['phpUploadMaxFileSizeBytes'])
+                ? $runtimeLimits['phpUploadMaxFileSizeBytes']
+                : null,
+        ];
+
+        return array_filter(
+            $details,
+            static fn ($value): bool => $value !== null
+        );
     }
 
     private function parseDateTime(string $value): ?int

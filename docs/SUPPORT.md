@@ -1,11 +1,11 @@
 # SuiteSidecar Support Playbook
 
-Use this for first-line troubleshooting. Always capture `requestId` from API/add-in errors.
+Use this for first-line troubleshooting. Always capture `requestId` from API errors (`X-Request-Id` header or JSON error body).
 
 ## What to collect
 
-1. `requestId` from add-in status or JSON error response.
-2. Endpoint and method (`/auth/login`, `/lookup/by-email`, `/email/log`).
+1. `requestId` from response header (`X-Request-Id`) or JSON error response.
+2. Endpoint and method (`/auth/login`, `/lookup/by-email`, `/email/log`, `/tasks/from-email`, `/opportunities/by-context`).
 3. HTTP status code.
 4. Timestamp (UTC) and profile id.
 
@@ -39,6 +39,28 @@ Use this for first-line troubleshooting. Always capture `requestId` from API/add
    - treat as expected idempotency protection.
 3. If `502 suitecrm_bad_response`:
    - verify target module relationship and required fields in SuiteCRM.
+4. If `413 payload_too_large`:
+   - compare response `error.details.maxRequestBytes` vs request size.
+   - reduce attachment count/size and retry.
+   - if needed, tune connector/PHP limits (`post_max_size`, `upload_max_filesize`, optional `SUITESIDECAR_MAX_REQUEST_BYTES`).
+
+## Create-task failures (`POST /tasks/from-email`)
+
+1. If `400 bad_request`:
+   - verify payload contains valid `message.from.email`, `message.subject`, `message.receivedDateTime`.
+   - verify at least one message id exists (`graphMessageId` or `internetMessageId`).
+2. If `200` with `deduplicated=true`:
+   - existing task was reused (expected idempotency behavior).
+3. If `502 suitecrm_unreachable`:
+   - verify SuiteCRM API availability and profile connectivity.
+
+## Opportunities failures (`GET /opportunities/by-context`)
+
+1. If `400 bad_request`:
+   - verify `personId` or `accountId` is present.
+   - verify `personModule` is one of `Contacts|Leads` when provided.
+2. If `200` with empty `items`:
+   - expected when no related opportunities are accessible to the current user.
 
 ## Known behavior (current)
 

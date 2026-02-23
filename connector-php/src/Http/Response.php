@@ -30,14 +30,19 @@ final class Response
         echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
-    public static function error(string $code, string $message, int $status): void
+    public static function error(string $code, string $message, int $status, ?array $details = null): void
     {
+        $error = [
+            'code' => $code,
+            'message' => $message,
+            'requestId' => self::requestId(),
+        ];
+        if (is_array($details) && $details !== []) {
+            $error['details'] = $details;
+        }
+
         self::json([
-            'error' => [
-                'code' => $code,
-                'message' => $message,
-                'requestId' => self::requestId(),
-            ],
+            'error' => $error,
         ], $status);
     }
 }

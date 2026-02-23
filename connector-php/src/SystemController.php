@@ -22,7 +22,8 @@ final class SystemController
             'name' => 'suitesidecar-connector-php',
             'version' => '0.1.0',
             'gitSha' => getenv('APP_GIT_SHA') ?: null,
-            'buildTime' => getenv('APP_BUILD_TIME') ?: null
+            'buildTime' => getenv('APP_BUILD_TIME') ?: null,
+            'limits' => RuntimeLimits::resolve(),
         ]);
     }
 }

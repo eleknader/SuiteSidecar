@@ -127,4 +127,39 @@ final class Profile
 
         return $this->suitecrmBaseUrl . '/#/' . $moduleSegment . '/record/' . $recordId;
     }
+
+    public function legacyCreateLink(string $module, array $query = []): string
+    {
+        return $this->legacyActionLink($module, 'EditView', $query);
+    }
+
+    public function legacyListLink(string $module, array $query = []): string
+    {
+        return $this->legacyActionLink($module, 'index', $query);
+    }
+
+    public function legacyActionLink(string $module, string $action, array $query = []): string
+    {
+        $moduleName = trim($module);
+        $actionName = trim($action);
+        if ($moduleName === '') {
+            throw new InvalidArgumentException('Module is required for legacy links');
+        }
+        if ($actionName === '') {
+            throw new InvalidArgumentException('Action is required for legacy links');
+        }
+
+        $params = array_filter(
+            array_merge(
+                [
+                    'module' => $moduleName,
+                    'action' => $actionName,
+                ],
+                $query
+            ),
+            static fn (mixed $value): bool => $value !== null && trim((string) $value) !== ''
+        );
+
+        return $this->suitecrmBaseUrl . '/legacy/index.php?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+    }
 }

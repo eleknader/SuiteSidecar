@@ -394,7 +394,8 @@ Validation after sideload:
 2. Login with SuiteCRM user credentials.
 3. Open a known sender email and confirm automatic lookup runs.
 4. Test `Create Contact`, `Create Lead`, and `Log Email`.
-5. Add-in default for `maxAttachmentBytes` is `5242880` (5 MB). Ensure PHP `upload_max_filesize` and `post_max_size` are aligned if attachment limits are changed.
-6. For failures, capture `requestId` shown in the add-in status box.
+5. Add-in default for `maxAttachmentBytes` is `5242880` (5 MB). The add-in now auto-aligns this to connector `/version` runtime limits when available.
+6. `POST /email/log` returns `413 payload_too_large` when request size exceeds connector/PHP runtime limits.
+7. For failures, capture `requestId` from response header (`X-Request-Id`) or JSON error body.
 
 For requestId-based incident handling, see `docs/SUPPORT.md`.

@@ -9,11 +9,16 @@ This folder contains the Outlook taskpane MVP vertical slice.
 - Logout: `POST /auth/logout`
 - Lookup sender: `GET /lookup/by-email`
 - Lookup timeline view: `GET /lookup/by-email?include=timeline`
+- Lookup action deeplinks: `match.actions.createCallLink`, `match.actions.createMeetingLink`
 - Create Contact: `POST /entities/contacts`
 - Create Lead: `POST /entities/leads`
 - Log Email (SuiteCRM Notes): `POST /email/log`
+- Create Task from email: `POST /tasks/from-email`
+- Opportunities panel: `GET /opportunities/by-context`
 - Log Email options: `storeBody`, `storeAttachments`, `maxAttachmentBytes`
-- Show requestId in UI errors for support
+- Keep requestId in API payloads/logs only (not shown in taskpane UI)
+- Add-in aligns attachment size control to connector `/version` runtime limits when available
+- Add-in preflights oversized `/email/log` payloads and handles server `413 payload_too_large` explicitly
 - Auto-lookup on item change via `Office.EventType.ItemChanged` (after login)
 - Profile/connector changes clear local session and require re-login
 

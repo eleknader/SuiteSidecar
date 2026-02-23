@@ -170,6 +170,10 @@ button:disabled {
   font-size: 0.75rem;
 }
 
+#statusRequestId {
+  display: none;
+}
+
 .result-box {
   margin-top: 8px;
   border: 1px solid var(--border);
@@ -179,6 +183,10 @@ button:disabled {
 }
 
 .timeline-box {
+  margin-top: 6px;
+}
+
+.action-result {
   margin-top: 6px;
 }
 
@@ -203,6 +211,20 @@ button:disabled {
 
 .timeline-item-summary {
   margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.opportunity-list {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.opportunity-list li {
+  margin-bottom: 8px;
+}
+
+.opportunity-meta {
   color: var(--text-muted);
   font-size: 0.78rem;
 }

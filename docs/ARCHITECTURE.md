@@ -6,7 +6,8 @@
 > Current implementation direction (Q1 2026): contract-first connector hardening and
 > incremental delivery of authenticated profile-scoped endpoints (`/auth/login`,
 > `/auth/logout`, `/lookup/by-email`, `/entities/contacts`, `/entities/leads`,
-> `/email/log`) before add-in UI expansion.
+> `/email/log`, `/tasks/from-email`, `/opportunities/by-context`) before broader
+> add-in expansion.
 
 ---
 
@@ -35,6 +36,9 @@
 - As a user, when I open an email, I want to instantly see the sender’s CRM context (Contact/Lead/Account).
 - As a user, if the sender is not found, I want to create a Contact or Lead with prefilled fields.
 - As a user, I want to log the email to SuiteCRM so the interaction history is preserved.
+- As a user, I want one-click deeplinks to open pre-related Call and Meeting create forms.
+- As a user, I want to create a follow-up Task from email metadata with deduplication safety.
+- As a user, I want to see the latest opportunities for the sender context and jump to full CRM view.
 
 ### 2.2 Admin / IT
 - As an admin, I want to deploy the add-in centrally to Microsoft 365 users.

@@ -18,6 +18,8 @@ tags:
   - name: Lookup
   - name: Entities
   - name: Email
+  - name: Tasks
+  - name: Opportunities
 
 security:
   - bearerAuth: []
@@ -233,6 +235,87 @@ paths:
         "500":
           $ref: "#/components/responses/ServerError"
 
+  /tasks/from-email:
+    post:
+      tags: [Tasks]
+      summary: Create a Task from selected email metadata
+      description: >
+        Creates a Task using minimal email metadata. Endpoint is idempotent by message identifiers:
+        if a task already exists for the same message id, the existing task is returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskFromEmailRequest"
+      responses:
+        "200":
+          description: Existing task returned (deduplicated)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskFromEmailResponse"
+        "201":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskFromEmailResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /opportunities/by-context:
+    get:
+      tags: [Opportunities]
+      summary: Get latest opportunities for contact/account context
+      description: >
+        Returns up to 5 most recently modified opportunities for the resolved context
+        (prefer account opportunities when account context is available).
+      parameters:
+        - name: personModule
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Contacts, Leads]
+        - name: personId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: accountId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+      responses:
+        "200":
+          description: Opportunities payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpportunitiesContextResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -303,6 +386,32 @@ components:
           type: string
           format: date-time
           nullable: true
+        limits:
+          $ref: "#/components/schemas/RuntimeLimits"
+
+    RuntimeLimits:
+      type: object
+      properties:
+        phpPostMaxBytes:
+          type: integer
+          nullable: true
+          description: Parsed `post_max_size` in bytes.
+        phpUploadMaxFileSizeBytes:
+          type: integer
+          nullable: true
+          description: Parsed `upload_max_filesize` in bytes.
+        maxRequestBytes:
+          type: integer
+          nullable: true
+          description: Effective connector-side request size cap used for oversized payload checks.
+        recommendedAttachmentBytes:
+          type: integer
+          nullable: true
+          description: Safe recommendation derived from request envelope limit for base64 attachment payloads.
+        maxAttachmentBytes:
+          type: integer
+          nullable: true
+          description: Effective attachment cap after applying connector runtime policy.
 
     # ---------- Auth ----------
     LoginRequest:
@@ -436,6 +545,8 @@ components:
       properties:
         person:
           $ref: "#/components/schemas/PersonSummary"
+        actions:
+          $ref: "#/components/schemas/PersonActionLinks"
         account:
           $ref: "#/components/schemas/AccountSummary"
         related:
@@ -444,6 +555,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TimelineItem"
+
+    PersonActionLinks:
+      type: object
+      properties:
+        createCallLink:
+          type: string
+          nullable: true
+          description: Legacy EditView URL prefilled with selected person relation.
+        createMeetingLink:
+          type: string
+          nullable: true
+          description: Legacy EditView URL prefilled with selected person relation.
 
     PersonSummary:
       type: object
@@ -611,7 +734,7 @@ components:
       properties:
         module:
           type: string
-          enum: [Contacts, Leads, Accounts, Notes, Emails]
+          enum: [Contacts, Leads, Accounts, Notes, Emails, Tasks]
         id:
           type: string
         displayName:
@@ -740,6 +863,135 @@ components:
           type: string
           nullable: true
           description: Base64 content (optional; may be omitted in v0.1).
+
+    # ---------- Tasks ----------
+    TaskFromEmailRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/TaskEmailMessage"
+        context:
+          $ref: "#/components/schemas/TaskCreateContext"
+
+    TaskEmailMessage:
+      type: object
+      required: [subject, from, receivedDateTime]
+      anyOf:
+        - required: [graphMessageId]
+        - required: [internetMessageId]
+      properties:
+        graphMessageId:
+          type: string
+          nullable: true
+          description: Graph message id when available (host-dependent).
+        internetMessageId:
+          type: string
+          nullable: true
+          description: RFC822 internet message id when available.
+        subject:
+          type: string
+        from:
+          $ref: "#/components/schemas/EmailParty"
+        receivedDateTime:
+          type: string
+          format: date-time
+        conversationId:
+          type: string
+          nullable: true
+        bodyPreview:
+          type: string
+          nullable: true
+          description: Short preview text only; full body is not required.
+        webLink:
+          type: string
+          format: uri
+          nullable: true
+
+    TaskCreateContext:
+      type: object
+      properties:
+        personModule:
+          type: string
+          enum: [Contacts, Leads, Accounts]
+          nullable: true
+        personId:
+          type: string
+          nullable: true
+        accountId:
+          type: string
+          nullable: true
+
+    TaskFromEmailResponse:
+      type: object
+      required: [task, deduplicated]
+      properties:
+        task:
+          $ref: "#/components/schemas/EntityCreateResponse"
+        deduplicated:
+          type: boolean
+          description: True if an existing task was returned instead of creating a new one.
+
+    # ---------- Opportunities ----------
+    OpportunitiesContextResponse:
+      type: object
+      required: [items, scope]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpportunitySummary"
+        viewAllLink:
+          type: string
+          nullable: true
+          description: Link to open full opportunity context in SuiteCRM.
+        scope:
+          $ref: "#/components/schemas/OpportunityScope"
+
+    OpportunityScope:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [account, contact, lead, none]
+        module:
+          type: string
+          nullable: true
+        id:
+          type: string
+          nullable: true
+
+    OpportunitySummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        salesStage:
+          type: string
+          nullable: true
+        amount:
+          type: number
+          format: float
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        dateClosed:
+          type: string
+          nullable: true
+        assignedUserName:
+          type: string
+          nullable: true
+        modifiedDate:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
 
     # ---------- Errors ----------
     ErrorResponse:

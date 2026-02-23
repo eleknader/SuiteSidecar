@@ -13,10 +13,12 @@ use SuiteSidecar\EntitiesController;
 use SuiteSidecar\Http\Router;
 use SuiteSidecar\Http\Response;
 use SuiteSidecar\LookupController;
+use SuiteSidecar\OpportunitiesController;
 use SuiteSidecar\ProfileController;
 use SuiteSidecar\ProfileRegistry;
 use SuiteSidecar\ProfileResolutionException;
 use SuiteSidecar\ProfileResolver;
+use SuiteSidecar\EmailActionLogStore;
 use SuiteSidecar\SuiteCrm\CrmAdapterInterface;
 use SuiteSidecar\SuiteCrm\MockAdapter;
 use SuiteSidecar\SuiteCrm\OAuthTokenProvider;
@@ -24,6 +26,7 @@ use SuiteSidecar\SuiteCrm\SessionAccessTokenProvider;
 use SuiteSidecar\SuiteCrm\V8Adapter;
 use SuiteSidecar\SuiteCrm\V8Client;
 use SuiteSidecar\SystemController;
+use SuiteSidecar\TaskController;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 EnvLoader::load(__DIR__ . '/../.env');
@@ -95,10 +98,14 @@ try {
     $profileResolver = new ProfileResolver($profileRegistry);
     $oauthTokenProvider = new OAuthTokenProvider();
     $sessionStore = new SessionStore();
+    $emailActionLogStore = new EmailActionLogStore();
     $router = new Router();
     $systemController = new SystemController();
     $profileController = new ProfileController($profileRegistry->all());
-    $buildAdapterForSession = static function (\SuiteSidecar\SuiteCrm\Profile $profile, array $session): \SuiteSidecar\SuiteCrm\CrmAdapterInterface {
+    $buildAdapterForSession = static function (
+        \SuiteSidecar\SuiteCrm\Profile $profile,
+        array $session
+    ) use ($emailActionLogStore): \SuiteSidecar\SuiteCrm\CrmAdapterInterface {
         if ($profile->apiFlavor === 'suitecrm_v8_jsonapi') {
             $tokenProvider = new SessionAccessTokenProvider($session, Response::requestId());
             return new V8Adapter(
@@ -108,7 +115,8 @@ try {
                     $tokenProvider,
                     $profile,
                     Response::requestId()
-                )
+                ),
+                $emailActionLogStore
             );
         }
 
@@ -330,6 +338,85 @@ try {
             Response::error('bad_request', $e->getMessage(), 400);
         } catch (AuthException $e) {
             error_log('[requestId=' . Response::requestId() . '] Email log auth setup failed: ' . $e->getMessage());
+            Response::error('server_error', 'Internal server error', 500);
+        }
+    });
+    $router->post('/tasks/from-email', static function () use (
+        $buildJwtService,
+        $readHeaders,
+        $sessionStore,
+        $profileResolver,
+        $buildAdapterForSession
+    ): void {
+        $jwtService = $buildJwtService();
+        if ($jwtService === null) {
+            Response::error('server_error', 'Authentication service is not configured', 500);
+            return;
+        }
+
+        try {
+            $headers = $readHeaders();
+            $authMiddleware = new AuthMiddleware($jwtService, $sessionStore);
+            $authContext = $authMiddleware->requireAuth($headers);
+            if ($authContext === null) {
+                return;
+            }
+
+            $profile = $profileResolver->resolve($_GET, $headers);
+            $session = isset($authContext['session']) && is_array($authContext['session']) ? $authContext['session'] : [];
+            $claims = isset($authContext['claims']) && is_array($authContext['claims']) ? $authContext['claims'] : [];
+            $sessionProfileId = isset($session['profileId']) ? (string) $session['profileId'] : '';
+            if ($sessionProfileId !== '' && $sessionProfileId !== $profile->id) {
+                Response::error('unauthorized', 'Profile does not match authenticated session', 401);
+                return;
+            }
+
+            $adapter = $buildAdapterForSession($profile, $session);
+            $taskController = new TaskController($adapter);
+            $taskController->createFromEmail($session, $claims);
+        } catch (ProfileResolutionException $e) {
+            Response::error('bad_request', $e->getMessage(), 400);
+        } catch (AuthException $e) {
+            error_log('[requestId=' . Response::requestId() . '] Task create auth setup failed: ' . $e->getMessage());
+            Response::error('server_error', 'Internal server error', 500);
+        }
+    });
+    $router->get('/opportunities/by-context', static function () use (
+        $buildJwtService,
+        $readHeaders,
+        $sessionStore,
+        $profileResolver,
+        $buildAdapterForSession
+    ): void {
+        $jwtService = $buildJwtService();
+        if ($jwtService === null) {
+            Response::error('server_error', 'Authentication service is not configured', 500);
+            return;
+        }
+
+        try {
+            $headers = $readHeaders();
+            $authMiddleware = new AuthMiddleware($jwtService, $sessionStore);
+            $authContext = $authMiddleware->requireAuth($headers);
+            if ($authContext === null) {
+                return;
+            }
+
+            $profile = $profileResolver->resolve($_GET, $headers);
+            $session = isset($authContext['session']) && is_array($authContext['session']) ? $authContext['session'] : [];
+            $sessionProfileId = isset($session['profileId']) ? (string) $session['profileId'] : '';
+            if ($sessionProfileId !== '' && $sessionProfileId !== $profile->id) {
+                Response::error('unauthorized', 'Profile does not match authenticated session', 401);
+                return;
+            }
+
+            $adapter = $buildAdapterForSession($profile, $session);
+            $opportunitiesController = new OpportunitiesController($adapter);
+            $opportunitiesController->byContext();
+        } catch (ProfileResolutionException $e) {
+            Response::error('bad_request', $e->getMessage(), 400);
+        } catch (AuthException $e) {
+            error_log('[requestId=' . Response::requestId() . '] Opportunities auth setup failed: ' . $e->getMessage());
             Response::error('server_error', 'Internal server error', 500);
         }
     });

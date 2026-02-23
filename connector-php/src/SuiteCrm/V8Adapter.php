@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace SuiteSidecar\SuiteCrm;
 
+use SuiteSidecar\EmailActionLogStore;
+
 final class V8Adapter implements CrmAdapterInterface
 {
     public function __construct(
         private readonly Profile $profile,
         private readonly V8Client $client,
+        private readonly ?EmailActionLogStore $emailActionLogStore = null,
     ) {
     }
 
@@ -38,6 +41,11 @@ final class V8Adapter implements CrmAdapterInterface
             'notFound' => false,
             'match' => [
                 'person' => $person,
+                'actions' => $this->buildPersonActionLinks(
+                    $module,
+                    (string) $person['id'],
+                    (string) $person['displayName']
+                ),
             ],
             'suggestions' => [],
         ];
@@ -184,12 +192,196 @@ final class V8Adapter implements CrmAdapterInterface
         ];
     }
 
+    public function createTaskFromEmail(array $payload): array
+    {
+        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : [];
+        $audit = isset($payload['audit']) && is_array($payload['audit']) ? $payload['audit'] : [];
+        $context = isset($payload['context']) && is_array($payload['context']) ? $payload['context'] : [];
+
+        $graphMessageId = $this->normalizeTaskMessageId($message['graphMessageId'] ?? null, false);
+        $internetMessageId = $this->normalizeTaskMessageId($message['internetMessageId'] ?? null, true);
+        if ($graphMessageId === null && $internetMessageId === null) {
+            throw new SuiteCrmBadResponseException('Task create requires graphMessageId or internetMessageId');
+        }
+
+        $actionLogStore = $this->emailActionLogStore ?? new EmailActionLogStore();
+        $existingEntry = $actionLogStore->findTaskByMessageKeys($this->profile->id, $graphMessageId, $internetMessageId);
+        if ($existingEntry !== null) {
+            $existingTaskId = trim((string) (($existingEntry['task']['id'] ?? '')));
+            if ($existingTaskId !== '') {
+                $existingTask = $this->fetchTaskById($existingTaskId);
+                if ($existingTask !== null) {
+                    return [
+                        'task' => $existingTask,
+                        'deduplicated' => true,
+                    ];
+                }
+            }
+        }
+
+        $subject = trim((string) ($message['subject'] ?? ''));
+        $from = isset($message['from']) && is_array($message['from']) ? $message['from'] : [];
+        $fromEmail = trim((string) ($from['email'] ?? ''));
+        $fromName = trim((string) ($from['name'] ?? ''));
+        $receivedDateTime = trim((string) ($message['receivedDateTime'] ?? ''));
+        $conversationId = trim((string) ($message['conversationId'] ?? ''));
+        $webLink = trim((string) ($message['webLink'] ?? ''));
+        $bodyPreview = trim((string) ($message['bodyPreview'] ?? ''));
+
+        $resolvedLink = $this->resolveTaskLinkTarget($fromEmail, $context);
+        $attributes = [
+            'name' => $this->toShortText($subject !== '' ? $subject : 'Follow up email', 255),
+            'description' => $this->buildTaskDescription(
+                $fromName,
+                $fromEmail,
+                $receivedDateTime,
+                $webLink,
+                $bodyPreview,
+                $graphMessageId,
+                $internetMessageId,
+                $conversationId,
+                $audit
+            ),
+        ];
+
+        if ($resolvedLink !== null) {
+            $parentModule = trim((string) ($resolvedLink['parentModule'] ?? ''));
+            $parentId = trim((string) ($resolvedLink['parentId'] ?? ''));
+            if ($parentModule !== '' && $parentId !== '') {
+                $attributes['parent_type'] = $parentModule;
+                $attributes['parent_id'] = $parentId;
+            }
+
+            $contactId = trim((string) ($resolvedLink['contactId'] ?? ''));
+            if ($contactId !== '') {
+                $attributes['contact_id'] = $contactId;
+            }
+        }
+
+        $response = $this->client->post('/Api/V8/module', [
+            'data' => [
+                'type' => 'Tasks',
+                'attributes' => $attributes,
+            ],
+        ]);
+
+        $task = $this->mapEntityCreateResponse($response, 'Tasks', 'name');
+        $actionLogStore->saveTaskMessageKeys(
+            $this->profile->id,
+            $graphMessageId,
+            $internetMessageId,
+            $task,
+            [
+                'createdAt' => isset($audit['createdAt']) ? (string) $audit['createdAt'] : gmdate('c'),
+                'createdBy' => isset($audit['createdBy']) ? (string) $audit['createdBy'] : null,
+                'createdBySubjectId' => isset($audit['createdBySubjectId']) ? (string) $audit['createdBySubjectId'] : null,
+                'fromEmail' => $fromEmail !== '' ? $fromEmail : null,
+            ]
+        );
+
+        return [
+            'task' => $task,
+            'deduplicated' => false,
+        ];
+    }
+
+    public function listOpportunities(array $payload): array
+    {
+        $personModule = trim((string) ($payload['personModule'] ?? ''));
+        $personId = trim((string) ($payload['personId'] ?? ''));
+        $accountId = trim((string) ($payload['accountId'] ?? ''));
+        $limit = $this->toPositiveIntOrNull($payload['limit'] ?? null) ?? 5;
+        $limit = min($limit, 20);
+
+        $scope = [
+            'module' => null,
+            'id' => null,
+            'mode' => 'none',
+        ];
+
+        if ($accountId !== '') {
+            $scope = [
+                'module' => 'Accounts',
+                'id' => $accountId,
+                'mode' => 'account',
+            ];
+        } elseif ($personModule === 'Contacts' && $personId !== '') {
+            $contactAccount = $this->fetchAccountForContactId($personId);
+            if ($contactAccount !== null) {
+                $scope = [
+                    'module' => 'Accounts',
+                    'id' => (string) ($contactAccount['id'] ?? ''),
+                    'mode' => 'account',
+                ];
+            } else {
+                $scope = [
+                    'module' => 'Contacts',
+                    'id' => $personId,
+                    'mode' => 'contact',
+                ];
+            }
+        } elseif ($personModule === 'Leads' && $personId !== '') {
+            $scope = [
+                'module' => 'Leads',
+                'id' => $personId,
+                'mode' => 'lead',
+            ];
+        }
+
+        $rows = [];
+        if ($scope['module'] === 'Accounts' && $scope['id'] !== null) {
+            $rows = $this->fetchRelationshipRows(
+                'Accounts',
+                (string) $scope['id'],
+                'opportunities',
+                'Opportunities',
+                $limit
+            );
+        } elseif ($scope['module'] === 'Contacts' && $scope['id'] !== null) {
+            $rows = $this->fetchRelationshipRows(
+                'Contacts',
+                (string) $scope['id'],
+                'opportunities',
+                'Opportunities',
+                $limit
+            );
+        }
+
+        $items = [];
+        foreach ($rows as $row) {
+            $mapped = $this->mapOpportunitySummary($row);
+            if ($mapped !== null) {
+                $items[] = $mapped;
+            }
+        }
+
+        $viewAllLink = null;
+        if ($scope['module'] !== null && $scope['id'] !== null && trim((string) $scope['id']) !== '') {
+            $viewAllLink = $this->profile->deepLink((string) $scope['module'], (string) $scope['id']);
+        }
+
+        return [
+            'items' => $items,
+            'viewAllLink' => $viewAllLink,
+            'scope' => [
+                'mode' => $scope['mode'],
+                'module' => $scope['module'],
+                'id' => $scope['id'],
+            ],
+        ];
+    }
+
     private function queryFirstPerson(string $module, string $email): ?array
     {
+        $fields = ['first_name', 'last_name', 'email1', 'phone_work', 'title'];
+        if ($module === 'Contacts') {
+            $fields[] = 'account_id';
+        }
+
         $response = $this->client->get('/Api/V8/module/' . $module, [
             'filter[email1][eq]' => $email,
             'page[size]' => 1,
-            'fields[' . $module . ']' => 'first_name,last_name,email1,phone_work,title',
+            'fields[' . $module . ']' => implode(',', $fields),
         ]);
 
         $data = $response['data'] ?? null;
@@ -311,6 +503,295 @@ final class V8Adapter implements CrmAdapterInterface
         return substr((string) $normalizedMessageId, 0, 191);
     }
 
+    private function buildPersonActionLinks(string $personModule, string $personId, string $personName): array
+    {
+        $module = trim($personModule);
+        $id = trim($personId);
+        if ($module === '' || $id === '') {
+            return [
+                'createCallLink' => null,
+                'createMeetingLink' => null,
+            ];
+        }
+
+        $query = [
+            'return_module' => $module,
+            'return_action' => 'DetailView',
+            'return_id' => $id,
+            'parent_type' => $module,
+            'parent_id' => $id,
+            'parent_name' => $personName,
+        ];
+
+        return [
+            'createCallLink' => $this->profile->legacyCreateLink('Calls', $query),
+            'createMeetingLink' => $this->profile->legacyCreateLink('Meetings', $query),
+        ];
+    }
+
+    private function normalizeTaskMessageId(mixed $value, bool $internetStyle): ?string
+    {
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        $normalized = trim((string) $value);
+        if ($normalized === '') {
+            return null;
+        }
+
+        if ($internetStyle) {
+            $normalized = preg_replace('/\s+/', '', strtolower($normalized)) ?? '';
+            $normalized = trim($normalized, '<>');
+        }
+
+        $normalized = trim($normalized);
+        if ($normalized === '') {
+            return null;
+        }
+
+        return substr($normalized, 0, 255);
+    }
+
+    private function fetchTaskById(string $taskId): ?array
+    {
+        try {
+            $response = $this->client->get('/Api/V8/module/Tasks/' . rawurlencode($taskId), [
+                'fields[Tasks]' => 'name',
+            ]);
+        } catch (SuiteCrmException) {
+            return null;
+        }
+
+        $item = $response['data'] ?? null;
+        if (!is_array($item)) {
+            return null;
+        }
+
+        $id = trim((string) ($item['id'] ?? ''));
+        if ($id === '') {
+            return null;
+        }
+
+        $attributes = $item['attributes'] ?? [];
+        if (!is_array($attributes)) {
+            $attributes = [];
+        }
+
+        $name = trim((string) ($attributes['name'] ?? ''));
+        if ($name === '') {
+            $name = 'Task ' . $id;
+        }
+
+        return [
+            'module' => 'Tasks',
+            'id' => $id,
+            'displayName' => $this->toShortText($name, 255),
+            'link' => $this->profile->deepLink('Tasks', $id),
+        ];
+    }
+
+    private function resolveTaskLinkTarget(string $fromEmail, array $context): ?array
+    {
+        $preferredModule = trim((string) ($context['personModule'] ?? $context['module'] ?? ''));
+        $preferredId = trim((string) ($context['personId'] ?? $context['id'] ?? ''));
+        $preferredAccountId = trim((string) ($context['accountId'] ?? ''));
+
+        if ($preferredModule === 'Contacts' && $preferredId !== '') {
+            $account = $preferredAccountId !== ''
+                ? $this->fetchAccountById($preferredAccountId)
+                : $this->fetchAccountForContactId($preferredId);
+
+            if ($account !== null) {
+                return [
+                    'parentModule' => 'Accounts',
+                    'parentId' => (string) ($account['id'] ?? ''),
+                    'contactId' => $preferredId,
+                ];
+            }
+
+            return [
+                'parentModule' => 'Contacts',
+                'parentId' => $preferredId,
+                'contactId' => $preferredId,
+            ];
+        }
+
+        if ($preferredModule === 'Leads' && $preferredId !== '') {
+            return [
+                'parentModule' => 'Leads',
+                'parentId' => $preferredId,
+                'contactId' => null,
+            ];
+        }
+
+        if ($preferredModule === 'Accounts' && ($preferredAccountId !== '' || $preferredId !== '')) {
+            $accountId = $preferredAccountId !== '' ? $preferredAccountId : $preferredId;
+            return [
+                'parentModule' => 'Accounts',
+                'parentId' => $accountId,
+                'contactId' => null,
+            ];
+        }
+
+        $email = trim($fromEmail);
+        if ($email === '') {
+            return null;
+        }
+
+        $contact = $this->queryFirstPerson('Contacts', $email);
+        if ($contact !== null) {
+            $contactId = trim((string) ($contact['id'] ?? ''));
+            if ($contactId !== '') {
+                $account = $this->fetchRelatedAccount($contact);
+                if ($account !== null) {
+                    return [
+                        'parentModule' => 'Accounts',
+                        'parentId' => (string) ($account['id'] ?? ''),
+                        'contactId' => $contactId,
+                    ];
+                }
+
+                return [
+                    'parentModule' => 'Contacts',
+                    'parentId' => $contactId,
+                    'contactId' => $contactId,
+                ];
+            }
+        }
+
+        $lead = $this->queryFirstPerson('Leads', $email);
+        if ($lead !== null) {
+            $leadId = trim((string) ($lead['id'] ?? ''));
+            if ($leadId !== '') {
+                return [
+                    'parentModule' => 'Leads',
+                    'parentId' => $leadId,
+                    'contactId' => null,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function buildTaskDescription(
+        string $fromName,
+        string $fromEmail,
+        string $receivedDateTime,
+        string $webLink,
+        string $bodyPreview,
+        ?string $graphMessageId,
+        ?string $internetMessageId,
+        string $conversationId,
+        array $audit
+    ): string {
+        $lines = ['Created from Outlook email by SuiteSidecar.'];
+
+        $senderLabel = trim($fromName) !== '' ? trim($fromName) . ' <' . trim($fromEmail) . '>' : trim($fromEmail);
+        if ($senderLabel !== '') {
+            $lines[] = 'From: ' . $this->toShortText($senderLabel, 255);
+        }
+
+        if (trim($receivedDateTime) !== '') {
+            $lines[] = 'Received: ' . $this->toShortText($receivedDateTime, 64);
+        }
+
+        if (trim($webLink) !== '') {
+            $lines[] = 'Web link: ' . $this->toShortText($webLink, 255);
+        }
+
+        if ($graphMessageId !== null) {
+            $lines[] = 'Graph message id: ' . $this->toShortText($graphMessageId, 255);
+        }
+
+        if ($internetMessageId !== null) {
+            $lines[] = 'Internet message id: ' . $this->toShortText($internetMessageId, 255);
+        }
+
+        if (trim($conversationId) !== '') {
+            $lines[] = 'Conversation id: ' . $this->toShortText($conversationId, 255);
+        }
+
+        $preview = trim($bodyPreview);
+        if ($preview !== '') {
+            $lines[] = 'Preview: ' . $this->toShortText($preview, 280);
+        }
+
+        $auditAt = trim((string) ($audit['createdAt'] ?? ''));
+        if ($auditAt !== '') {
+            $lines[] = 'Created at: ' . $this->toShortText($auditAt, 64);
+        }
+
+        $auditBy = trim((string) ($audit['createdBy'] ?? ''));
+        if ($auditBy !== '') {
+            $lines[] = 'Created by: ' . $this->toShortText($auditBy, 255);
+        }
+
+        $auditBySubject = trim((string) ($audit['createdBySubjectId'] ?? ''));
+        if ($auditBySubject !== '') {
+            $lines[] = 'Creator session id: ' . $this->toShortText($auditBySubject, 64);
+        }
+
+        return $this->toShortText(implode("\n", $lines), 60000);
+    }
+
+    private function mapOpportunitySummary(array $row): ?array
+    {
+        $id = trim((string) ($row['id'] ?? ''));
+        if ($id === '') {
+            return null;
+        }
+
+        $attributes = $row['attributes'] ?? [];
+        if (!is_array($attributes)) {
+            $attributes = [];
+        }
+
+        $name = trim((string) ($attributes['name'] ?? ''));
+        if ($name === '') {
+            $name = 'Opportunity ' . $id;
+        }
+
+        return [
+            'id' => $id,
+            'name' => $this->toShortText($name, 255),
+            'salesStage' => isset($attributes['sales_stage']) ? (string) $attributes['sales_stage'] : null,
+            'amount' => isset($attributes['amount']) && is_scalar($attributes['amount']) && is_numeric((string) $attributes['amount'])
+                ? (float) $attributes['amount']
+                : null,
+            'currency' => isset($attributes['currency_id']) ? (string) $attributes['currency_id'] : null,
+            'dateClosed' => isset($attributes['date_closed']) ? (string) $attributes['date_closed'] : null,
+            'assignedUserName' => isset($attributes['assigned_user_name']) ? (string) $attributes['assigned_user_name'] : null,
+            'modifiedDate' => isset($attributes['date_modified']) ? (string) $attributes['date_modified'] : null,
+            'link' => $this->profile->deepLink('Opportunities', $id),
+        ];
+    }
+
+    private function fetchRelationshipRows(
+        string $module,
+        string $recordId,
+        string $relationship,
+        string $relatedModule,
+        int $limit
+    ): array {
+        try {
+            $response = $this->client->get(
+                '/Api/V8/module/' . rawurlencode($module) . '/' . rawurlencode($recordId) . '/relationships/' . rawurlencode($relationship),
+                [
+                    'page[size]' => $limit,
+                    'sort' => '-date_modified',
+                    'fields[' . $relatedModule . ']' => 'name,sales_stage,amount,currency_id,date_closed,assigned_user_name,date_modified',
+                ]
+            );
+        } catch (SuiteCrmException) {
+            return [];
+        }
+
+        $data = $response['data'] ?? null;
+        return is_array($data) ? $data : [];
+    }
+
     private function mapPerson(array $item, string $module, string $emailFallback): array
     {
         $id = isset($item['id']) ? (string) $item['id'] : '';
@@ -355,29 +836,76 @@ final class V8Adapter implements CrmAdapterInterface
 
     private function fetchRelatedAccount(array $contact): ?array
     {
-        $relationships = $contact['relationships'] ?? null;
-        if (!is_array($relationships)) {
-            return null;
-        }
-
-        $accounts = $relationships['accounts']['data'] ?? null;
-        if (!is_array($accounts)) {
-            return null;
-        }
-
         $accountId = null;
-        if (isset($accounts[0]['id']) && trim((string) $accounts[0]['id']) !== '') {
-            $accountId = (string) $accounts[0]['id'];
-        } elseif (isset($accounts['id']) && trim((string) $accounts['id']) !== '') {
-            $accountId = (string) $accounts['id'];
+
+        $relationships = $contact['relationships'] ?? null;
+        if (is_array($relationships)) {
+            $accounts = $relationships['accounts']['data'] ?? null;
+            if (is_array($accounts)) {
+                if (isset($accounts[0]['id']) && trim((string) $accounts[0]['id']) !== '') {
+                    $accountId = (string) $accounts[0]['id'];
+                } elseif (isset($accounts['id']) && trim((string) $accounts['id']) !== '') {
+                    $accountId = (string) $accounts['id'];
+                }
+            }
         }
 
         if ($accountId === null) {
+            $attributes = $contact['attributes'] ?? [];
+            if (is_array($attributes) && isset($attributes['account_id']) && trim((string) $attributes['account_id']) !== '') {
+                $accountId = (string) $attributes['account_id'];
+            }
+        }
+
+        if ($accountId === null || trim($accountId) === '') {
+            return null;
+        }
+
+        return $this->fetchAccountById($accountId);
+    }
+
+    private function fetchAccountForContactId(string $contactId): ?array
+    {
+        $id = trim($contactId);
+        if ($id === '') {
             return null;
         }
 
         try {
-            $response = $this->client->get('/Api/V8/module/Accounts/' . rawurlencode($accountId), [
+            $response = $this->client->get('/Api/V8/module/Contacts/' . rawurlencode($id), [
+                'fields[Contacts]' => 'account_id',
+            ]);
+        } catch (SuiteCrmException) {
+            return null;
+        }
+
+        $data = $response['data'] ?? null;
+        if (!is_array($data)) {
+            return null;
+        }
+
+        $attributes = $data['attributes'] ?? [];
+        if (!is_array($attributes)) {
+            return null;
+        }
+
+        $accountId = trim((string) ($attributes['account_id'] ?? ''));
+        if ($accountId === '') {
+            return null;
+        }
+
+        return $this->fetchAccountById($accountId);
+    }
+
+    private function fetchAccountById(string $accountId): ?array
+    {
+        $id = trim($accountId);
+        if ($id === '') {
+            return null;
+        }
+
+        try {
+            $response = $this->client->get('/Api/V8/module/Accounts/' . rawurlencode($id), [
                 'fields[Accounts]' => 'name,phone_office,website',
             ]);
         } catch (SuiteCrmException) {
@@ -389,23 +917,25 @@ final class V8Adapter implements CrmAdapterInterface
             return null;
         }
 
-        $id = isset($data['id']) ? (string) $data['id'] : $accountId;
+        $rowId = isset($data['id']) ? trim((string) $data['id']) : '';
         $attributes = $data['attributes'] ?? [];
         if (!is_array($attributes)) {
             return null;
         }
 
-        $name = isset($attributes['name']) ? trim((string) $attributes['name']) : '';
+        $name = trim((string) ($attributes['name'] ?? ''));
         if ($name === '') {
             return null;
         }
 
+        $resolvedId = $rowId !== '' ? $rowId : $id;
+
         return [
-            'id' => $id,
+            'id' => $resolvedId,
             'name' => $name,
             'phone' => isset($attributes['phone_office']) ? (string) $attributes['phone_office'] : null,
             'website' => isset($attributes['website']) ? (string) $attributes['website'] : null,
-            'link' => $this->profile->deepLink('Accounts', $id),
+            'link' => $this->profile->deepLink('Accounts', $resolvedId),
         ];
     }
 

@@ -39,6 +39,24 @@ final class MockAdapter implements CrmAdapterInterface
                     'phone' => '+358 40 123 4567',
                     'link' => $this->deepLink('Contacts', $personId),
                 ],
+                'actions' => [
+                    'createCallLink' => $this->legacyCreateLink('Calls', [
+                        'return_module' => 'Contacts',
+                        'return_action' => 'DetailView',
+                        'return_id' => $personId,
+                        'parent_type' => 'Contacts',
+                        'parent_id' => $personId,
+                        'parent_name' => 'Matti Meikäläinen',
+                    ]),
+                    'createMeetingLink' => $this->legacyCreateLink('Meetings', [
+                        'return_module' => 'Contacts',
+                        'return_action' => 'DetailView',
+                        'return_id' => $personId,
+                        'parent_type' => 'Contacts',
+                        'parent_id' => $personId,
+                        'parent_name' => 'Matti Meikäläinen',
+                    ]),
+                ],
             ],
             'suggestions' => [],
         ];
@@ -160,8 +178,103 @@ final class MockAdapter implements CrmAdapterInterface
         ];
     }
 
+    public function createTaskFromEmail(array $payload): array
+    {
+        $message = isset($payload['message']) && is_array($payload['message']) ? $payload['message'] : [];
+        $graphMessageId = strtolower(trim((string) ($message['graphMessageId'] ?? '')));
+        $internetMessageId = strtolower(trim((string) ($message['internetMessageId'] ?? '')));
+
+        if (
+            ($graphMessageId !== '' && (str_contains($graphMessageId, 'duplicate') || str_contains($graphMessageId, '+dup')))
+            || ($internetMessageId !== '' && (str_contains($internetMessageId, 'duplicate') || str_contains($internetMessageId, '+dup')))
+        ) {
+            return [
+                'task' => [
+                    'module' => 'Tasks',
+                    'id' => 'mock-task-existing-001',
+                    'displayName' => 'Follow up email',
+                    'link' => $this->deepLink('Tasks', 'mock-task-existing-001'),
+                ],
+                'deduplicated' => true,
+            ];
+        }
+
+        $subject = trim((string) ($message['subject'] ?? 'Follow up email'));
+        $taskId = 'mock-task-' . bin2hex(random_bytes(6));
+
+        return [
+            'task' => [
+                'module' => 'Tasks',
+                'id' => $taskId,
+                'displayName' => $subject !== '' ? $subject : 'Follow up email',
+                'link' => $this->deepLink('Tasks', $taskId),
+            ],
+            'deduplicated' => false,
+        ];
+    }
+
+    public function listOpportunities(array $payload): array
+    {
+        $personModule = trim((string) ($payload['personModule'] ?? 'Contacts'));
+        $personId = trim((string) ($payload['personId'] ?? 'mock-contact-001'));
+        $accountId = trim((string) ($payload['accountId'] ?? 'mock-account-001'));
+
+        $mode = 'account';
+        $scopeModule = 'Accounts';
+        $scopeId = $accountId !== '' ? $accountId : 'mock-account-001';
+        if ($scopeId === '' && $personModule === 'Contacts') {
+            $mode = 'contact';
+            $scopeModule = 'Contacts';
+            $scopeId = $personId !== '' ? $personId : 'mock-contact-001';
+        }
+
+        return [
+            'items' => [
+                [
+                    'id' => 'mock-opp-001',
+                    'name' => 'CNC Lathe Offer',
+                    'salesStage' => 'Prospecting',
+                    'amount' => 12000.0,
+                    'currency' => '-99',
+                    'dateClosed' => gmdate('Y-m-d', strtotime('+14 days')),
+                    'assignedUserName' => 'Demo User',
+                    'modifiedDate' => gmdate('c', time() - 3600),
+                    'link' => $this->deepLink('Opportunities', 'mock-opp-001'),
+                ],
+                [
+                    'id' => 'mock-opp-002',
+                    'name' => 'Maintenance Contract',
+                    'salesStage' => 'Negotiation/Review',
+                    'amount' => 3500.0,
+                    'currency' => '-99',
+                    'dateClosed' => gmdate('Y-m-d', strtotime('+30 days')),
+                    'assignedUserName' => 'Demo User',
+                    'modifiedDate' => gmdate('c', time() - 7200),
+                    'link' => $this->deepLink('Opportunities', 'mock-opp-002'),
+                ],
+            ],
+            'viewAllLink' => $this->deepLink($scopeModule, $scopeId),
+            'scope' => [
+                'mode' => $mode,
+                'module' => $scopeModule,
+                'id' => $scopeId,
+            ],
+        ];
+    }
+
     private function deepLink(string $module, string $id): string
     {
         return self::CRM_BASE_URL . '/#/' . strtolower(trim($module)) . '/record/' . rawurlencode(trim($id));
+    }
+
+    private function legacyCreateLink(string $module, array $query): string
+    {
+        $params = http_build_query(
+            array_merge(['module' => $module, 'action' => 'EditView'], $query),
+            '',
+            '&',
+            PHP_QUERY_RFC3986
+        );
+        return self::CRM_BASE_URL . '/legacy/index.php?' . $params;
     }
 }

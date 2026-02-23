@@ -4,9 +4,13 @@ const state = {
   token: '',
   tokenExpiresAt: '',
   profiles: [],
+  connectorRuntimeLimits: null,
   lastLookup: null,
   lastOutlookBodyText: '',
   lastOutlookAttachments: [],
+  lastOutlookSenderName: '',
+  lastOutlookConversationId: '',
+  lastOutlookItemId: '',
   lastOutlookContextKey: '',
   officeReady: false,
   itemChangedHandlerRegistered: false,
@@ -35,8 +39,14 @@ function initElements() {
     'attachmentsInfo',
     'sentAtInput',
     'quickActionsBar',
+    'createCallBtn',
+    'createMeetingBtn',
+    'createTaskBtn',
+    'taskActionResult',
     'lookupResult',
     'timelineResult',
+    'opportunitiesCard',
+    'opportunitiesResult',
     'toggleActionsBtn',
     'actionsBody',
     'firstNameInput',
@@ -69,16 +79,66 @@ function initElements() {
 }
 
 function setStatus(kind, message, requestId = '') {
-  if (!els.statusBox || !els.statusMessage || !els.statusRequestId) {
+  if (!els.statusBox || !els.statusMessage) {
     return;
   }
   els.statusBox.className = `status status-${kind}`;
   els.statusMessage.textContent = message;
-  els.statusRequestId.textContent = requestId ? `requestId: ${requestId}` : '';
+  if (els.statusRequestId) {
+    // Keep requestId available in the function signature for diagnostics, but do not surface it in the UI.
+    els.statusRequestId.textContent = '';
+  }
 }
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function normalizeConnectorRuntimeLimits(rawLimits) {
+  const source = rawLimits && typeof rawLimits === 'object' ? rawLimits : {};
+  const maxRequestBytes = toPositiveIntOrNull(source.maxRequestBytes);
+  const maxAttachmentBytes =
+    toPositiveIntOrNull(source.maxAttachmentBytes) ||
+    toPositiveIntOrNull(source.recommendedAttachmentBytes);
+
+  return {
+    maxRequestBytes,
+    maxAttachmentBytes,
+    phpPostMaxBytes: toPositiveIntOrNull(source.phpPostMaxBytes),
+    phpUploadMaxFileSizeBytes: toPositiveIntOrNull(source.phpUploadMaxFileSizeBytes),
+    recommendedAttachmentBytes: toPositiveIntOrNull(source.recommendedAttachmentBytes),
+  };
+}
+
+function connectorMaxRequestBytes() {
+  return state.connectorRuntimeLimits && state.connectorRuntimeLimits.maxRequestBytes
+    ? state.connectorRuntimeLimits.maxRequestBytes
+    : null;
+}
+
+function connectorMaxAttachmentBytes() {
+  return state.connectorRuntimeLimits && state.connectorRuntimeLimits.maxAttachmentBytes
+    ? state.connectorRuntimeLimits.maxAttachmentBytes
+    : null;
+}
+
+function enforceConnectorAttachmentLimit(options = {}) {
+  const notify = options.notify === true;
+  const limit = connectorMaxAttachmentBytes();
+  if (!limit || !els.maxAttachmentBytesInput) {
+    return toPositiveIntOrNull(els.maxAttachmentBytesInput ? els.maxAttachmentBytesInput.value : '');
+  }
+
+  const current = toPositiveIntOrNull(els.maxAttachmentBytesInput.value);
+  if (current !== null && current <= limit) {
+    return current;
+  }
+
+  els.maxAttachmentBytesInput.value = String(limit);
+  if (notify) {
+    setStatus('info', `Attachment max aligned to connector limit (${limit} bytes).`);
+  }
+  return limit;
 }
 
 function activeProfileId() {
@@ -258,6 +318,7 @@ function refreshPanelVisibility() {
   setVisible(els.selectedEmailCard, authenticated);
   setVisible(els.quickActionsBar, authenticated);
   setVisible(els.lookupCard, authenticated);
+  setVisible(els.opportunitiesCard, authenticated);
   setVisible(els.actionsCard, authenticated);
   setVisible(els.sessionActionsRow, authenticated);
 }
@@ -391,6 +452,14 @@ function defaultTimelineHintHtml() {
   return '<p class="hint">No timeline loaded.</p>';
 }
 
+function defaultOpportunitiesHintHtml() {
+  return '<p class="hint">No opportunities loaded.</p>';
+}
+
+function defaultTaskActionHint() {
+  return '';
+}
+
 function setActionsCollapsed(collapsed) {
   if (els.actionsCard) {
     els.actionsCard.classList.toggle('is-collapsed', collapsed);
@@ -404,6 +473,20 @@ function setActionsCollapsed(collapsed) {
 function setCreateActionsVisible(visible) {
   setVisible(els.createContactBtn, visible);
   setVisible(els.createLeadBtn, visible);
+}
+
+function setButtonEnabled(button, enabled) {
+  if (!button) {
+    return;
+  }
+  button.disabled = !enabled;
+}
+
+function setTaskActionHtml(html) {
+  if (!els.taskActionResult) {
+    return;
+  }
+  els.taskActionResult.innerHTML = html || defaultTaskActionHint();
 }
 
 function buildOutlookContextKey(context) {
@@ -421,13 +504,23 @@ function resetActionsForContext(context) {
   state.lastLookup = null;
   state.lastOutlookBodyText = '';
   state.lastOutlookAttachments = [];
+  state.lastOutlookSenderName = context && context.senderName ? String(context.senderName) : '';
+  state.lastOutlookConversationId = context && context.conversationId ? String(context.conversationId) : '';
+  state.lastOutlookItemId = context && context.itemId ? String(context.itemId) : '';
   els.lookupResult.innerHTML = defaultLookupHintHtml();
   if (els.timelineResult) {
     els.timelineResult.innerHTML = defaultTimelineHintHtml();
     setVisible(els.timelineResult, false);
   }
+  if (els.opportunitiesResult) {
+    els.opportunitiesResult.innerHTML = defaultOpportunitiesHintHtml();
+  }
   setActionsCollapsed(true);
   setCreateActionsVisible(false);
+  setButtonEnabled(els.createCallBtn, false);
+  setButtonEnabled(els.createMeetingBtn, false);
+  setButtonEnabled(els.createTaskBtn, false);
+  setTaskActionHtml('');
   els.firstNameInput.value = names.firstName;
   els.lastNameInput.value = names.lastName;
   els.titleInput.value = '';
@@ -541,6 +634,106 @@ function formatTimeline(payload) {
   return `<ol class="timeline-list">${html}</ol>`;
 }
 
+function lookupPerson(payload = state.lastLookup) {
+  if (!payload || payload.notFound || !payload.match || !payload.match.person) {
+    return null;
+  }
+  return payload.match.person;
+}
+
+function lookupAccount(payload = state.lastLookup) {
+  if (!payload || payload.notFound || !payload.match || !payload.match.account) {
+    return null;
+  }
+  return payload.match.account;
+}
+
+function lookupActivityLink(kind, payload = state.lastLookup) {
+  const match = payload && payload.match ? payload.match : null;
+  const actions = match && match.actions ? match.actions : null;
+  if (!actions || typeof actions !== 'object') {
+    return '';
+  }
+  if (kind === 'call') {
+    return String(actions.createCallLink || '').trim();
+  }
+  if (kind === 'meeting') {
+    return String(actions.createMeetingLink || '').trim();
+  }
+  return '';
+}
+
+function updateQuickActionState() {
+  const person = lookupPerson();
+  const callLink = lookupActivityLink('call');
+  const meetingLink = lookupActivityLink('meeting');
+  const senderEmail = String(els.senderEmailInput ? els.senderEmailInput.value : '').trim();
+  const subject = String(els.subjectInput ? els.subjectInput.value : '').trim();
+
+  setButtonEnabled(els.createCallBtn, Boolean(person && callLink));
+  setButtonEnabled(els.createMeetingBtn, Boolean(person && meetingLink));
+  setButtonEnabled(els.createTaskBtn, Boolean(senderEmail && subject));
+}
+
+function formatOpportunityMeta(item) {
+  const stage = String((item && item.salesStage) || '').trim();
+  const amount = item && typeof item.amount === 'number' ? item.amount : null;
+  const currency = String((item && item.currency) || '').trim();
+  const dateClosed = String((item && item.dateClosed) || '').trim();
+  const assigned = String((item && item.assignedUserName) || '').trim();
+
+  const parts = [];
+  if (stage) {
+    parts.push(stage);
+  }
+  if (amount !== null && Number.isFinite(amount)) {
+    const amountText = currency ? `${amount} ${currency}` : `${amount}`;
+    parts.push(amountText);
+  }
+  if (dateClosed) {
+    parts.push(`close ${dateClosed}`);
+  }
+  if (assigned) {
+    parts.push(`owner ${assigned}`);
+  }
+  return parts.join(' | ');
+}
+
+function renderOpportunities(payload) {
+  if (!els.opportunitiesResult) {
+    return;
+  }
+
+  const items = payload && Array.isArray(payload.items) ? payload.items : [];
+  const viewAllLink = payload && payload.viewAllLink ? String(payload.viewAllLink).trim() : '';
+
+  if (!items.length) {
+    const viewAllHtml = viewAllLink
+      ? `<p class="hint"><a href="${escapeHtml(viewAllLink)}" target="_blank" rel="noreferrer">View all</a></p>`
+      : '';
+    els.opportunitiesResult.innerHTML = `<p class="hint">No opportunities found.</p>${viewAllHtml}`;
+    return;
+  }
+
+  const listHtml = items
+    .map((item) => {
+      const name = escapeHtml(item && item.name ? String(item.name) : 'Opportunity');
+      const link = item && item.link ? String(item.link) : '';
+      const meta = formatOpportunityMeta(item);
+      const titleHtml = link
+        ? `<a href="${escapeHtml(link)}" target="_blank" rel="noreferrer">${name}</a>`
+        : name;
+      return `<li><span>${titleHtml}</span>${meta ? `<div class="opportunity-meta">${escapeHtml(meta)}</div>` : ''}</li>`;
+    })
+    .join('');
+
+  const footer = viewAllLink
+    ? `<p class="hint"><a href="${escapeHtml(viewAllLink)}" target="_blank" rel="noreferrer">View all</a></p>`
+    : '';
+
+  els.opportunitiesResult.innerHTML = `<ol class="opportunity-list">${listHtml}</ol>${footer}`;
+}
+
 function normalizeBodyText(value) {
   return String(value || '')
     .replace(/\r\n/g, '\n')
@@ -557,6 +750,22 @@ function toPositiveIntOrNull(value) {
     return null;
   }
   return parsed;
+}
+
+function utf8ByteLength(value) {
+  const text = String(value || '');
+  if (typeof TextEncoder === 'function') {
+    return new TextEncoder().encode(text).length;
+  }
+  return unescape(encodeURIComponent(text)).length;
+}
+
+function estimateJsonPayloadBytes(payload) {
+  try {
+    return utf8ByteLength(JSON.stringify(payload));
+  } catch {
+    return null;
+  }
 }
 
 function mapOutlookAttachmentMeta(raw) {
@@ -720,6 +929,23 @@ async function resolveBodyTextForLog() {
   return state.lastOutlookBodyText;
 }
 
+async function refreshConnectorRuntimeLimits(options = {}) {
+  const suppressStatus = options.suppressStatus === true;
+
+  try {
+    const result = await apiRequest('/version', { auth: false });
+    const limits = normalizeConnectorRuntimeLimits(result.payload && result.payload.limits ? result.payload.limits : null);
+    state.connectorRuntimeLimits = limits;
+    enforceConnectorAttachmentLimit({ notify: false });
+    return result;
+  } catch (error) {
+    if (!suppressStatus) {
+      setStatus('warning', `Failed to load connector runtime limits: ${error.message}`, error.requestId || '');
+    }
+    return null;
+  }
+}
+
 async function loadProfiles(options = {}) {
   const suppressStatus = options.suppressStatus === true;
 
@@ -729,6 +955,7 @@ async function loadProfiles(options = {}) {
     }
     const result = await apiRequest('/profiles', { auth: false });
     state.profiles = Array.isArray(result.payload && result.payload.profiles) ? result.payload.profiles : [];
+    await refreshConnectorRuntimeLimits({ suppressStatus: true });
     renderProfiles();
     persistSession();
     if (!suppressStatus) {
@@ -814,10 +1041,7 @@ async function logout(options = {}) {
 }
 
 function confirmAndLogout() {
-  const shouldConfirm = typeof window !== 'undefined' && typeof window.confirm === 'function';
-  if (shouldConfirm && !window.confirm('Log out from current SuiteSidecar session?')) {
-    return;
-  }
+  // Office taskpane environments can block native confirm dialogs; logout should always be immediate.
   void logout();
 }
 
@@ -865,6 +1089,9 @@ async function runLookup(options = {}) {
     if (result.payload && result.payload.notFound) {
       setActionsCollapsed(false);
       setCreateActionsVisible(true);
+      if (els.opportunitiesResult) {
+        els.opportunitiesResult.innerHTML = defaultOpportunitiesHintHtml();
+      }
     } else {
       setActionsCollapsed(true);
       setCreateActionsVisible(false);
@@ -885,16 +1112,156 @@ async function runLookup(options = {}) {
       }
     }
 
+    updateQuickActionState();
+    if (result.payload && !result.payload.notFound) {
+      void loadOpportunitiesForLookup({ suppressStatus: true });
+    }
+
     if (!suppressStatus) {
       setStatus('success', 'Lookup completed.', result.requestId || '');
     }
     return result;
   } catch (error) {
     setCreateActionsVisible(false);
+    if (els.opportunitiesResult) {
+      els.opportunitiesResult.innerHTML = defaultOpportunitiesHintHtml();
+    }
+    updateQuickActionState();
     if (!suppressStatus) {
       setStatus('error', `Lookup failed: ${error.message}`, error.requestId || '');
     }
     return null;
+  }
+}
+
+async function loadOpportunitiesForLookup(options = {}) {
+  const suppressStatus = options.suppressStatus === true;
+  const person = lookupPerson();
+  const account = lookupAccount();
+
+  if (!person || !person.id || !person.module) {
+    if (els.opportunitiesResult) {
+      els.opportunitiesResult.innerHTML = defaultOpportunitiesHintHtml();
+    }
+    return null;
+  }
+
+  const profileId = activeProfileId();
+  if (!profileId) {
+    return null;
+  }
+
+  try {
+    const result = await apiRequest('/opportunities/by-context', {
+      method: 'GET',
+      profileId,
+      query: {
+        profileId,
+        personModule: person.module,
+        personId: person.id,
+        accountId: account && account.id ? account.id : '',
+        limit: 5,
+      },
+    });
+    renderOpportunities(result.payload || {});
+    return result;
+  } catch (error) {
+    if (els.opportunitiesResult) {
+      els.opportunitiesResult.innerHTML = '<p class="hint">Failed to load opportunities.</p>';
+    }
+    if (!suppressStatus) {
+      setStatus('warning', `Opportunities load failed: ${error.message}`, error.requestId || '');
+    }
+    return null;
+  }
+}
+
+function openLookupActivity(kind) {
+  const label = kind === 'meeting' ? 'meeting' : 'call';
+  if (!ensureAuthenticated(`opening ${label}`)) {
+    return;
+  }
+
+  const link = lookupActivityLink(kind);
+  if (!link) {
+    setStatus('warning', `No deeplink available for ${label}. Run lookup first.`);
+    return;
+  }
+
+  window.open(link, '_blank', 'noopener,noreferrer');
+  setStatus('success', `${label === 'meeting' ? 'Meeting' : 'Call'} create form opened in CRM.`);
+}
+
+function buildTaskCreatePayload() {
+  const person = lookupPerson();
+  const account = lookupAccount();
+  const senderEmail = String(els.senderEmailInput.value || '').trim();
+  const subject = String(els.subjectInput.value || '').trim();
+  const sentAtRaw = String(els.sentAtInput.value || '').trim();
+  const sentAt = sentAtRaw ? new Date(sentAtRaw).toISOString() : new Date().toISOString();
+  const internetMessageId = String(els.internetMessageIdInput.value || '').trim();
+  const bodyPreview = state.lastOutlookBodyText ? state.lastOutlookBodyText.slice(0, 280) : '';
+
+  return {
+    message: {
+      graphMessageId: state.lastOutlookItemId || null,
+      internetMessageId: internetMessageId || null,
+      subject,
+      from: {
+        name: state.lastOutlookSenderName || null,
+        email: senderEmail,
+      },
+      receivedDateTime: sentAt,
+      conversationId: state.lastOutlookConversationId || null,
+      bodyPreview: bodyPreview || null,
+      webLink: null,
+    },
+    context: {
+      personModule: person && person.module ? person.module : null,
+      personId: person && person.id ? person.id : null,
+      accountId: account && account.id ? account.id : null,
+    },
+  };
+}
+
+async function createTaskFromEmail() {
+  if (!ensureAuthenticated('creating task')) {
+    return;
+  }
+
+  const payload = buildTaskCreatePayload();
+  if (!payload.message.from.email || !payload.message.subject || !payload.message.receivedDateTime) {
+    setStatus('warning', 'Sender email, subject, and received time are required.');
+    return;
+  }
+  if (!payload.message.graphMessageId && !payload.message.internetMessageId) {
+    setStatus('warning', 'Task create requires message id (Graph or Internet Message ID).');
+    return;
+  }
+
+  const profileId = activeProfileId();
+  try {
+    setStatus('info', 'Creating task from email...');
+    const result = await apiRequest('/tasks/from-email', {
+      method: 'POST',
+      profileId,
+      query: { profileId },
+      body: payload,
+    });
+
+    const response = result.payload || {};
+    const task = response.task || null;
+    const taskLink = task && task.link ? String(task.link) : '';
+    const dedup = response.deduplicated === true;
+    const message = dedup ? 'Task already exists.' : 'Task created.';
+    const linkHtml = taskLink
+      ? ` <a href="${escapeHtml(taskLink)}" target="_blank" rel="noreferrer">Open Task</a>`
+      : '';
+    setTaskActionHtml(`${escapeHtml(message)}${linkHtml}`);
+    setStatus('success', message, result.requestId || '');
+  } catch (error) {
+    setTaskActionHtml('');
+    setStatus('error', `Create Task failed: ${error.message}`, error.requestId || '');
   }
 }
 
@@ -976,7 +1343,7 @@ async function logEmail() {
   const linkId = String(els.linkIdInput.value || '').trim();
   const storeBody = Boolean(els.storeBodyCheckbox && els.storeBodyCheckbox.checked);
   const storeAttachments = Boolean(els.storeAttachmentsCheckbox && els.storeAttachmentsCheckbox.checked);
-  const maxAttachmentBytes = toPositiveIntOrNull(els.maxAttachmentBytesInput ? els.maxAttachmentBytesInput.value : '');
+  const maxAttachmentBytes = enforceConnectorAttachmentLimit({ notify: false });
   const contextAttachmentCount = Array.isArray(state.lastOutlookAttachments) ? state.lastOutlookAttachments.length : 0;
 
   if (!senderEmail || !recipients.length || !messageId || !subject || !linkModule || !linkId) {
@@ -1011,6 +1378,15 @@ async function logEmail() {
       maxAttachmentBytes,
     },
   };
+  const estimatedPayloadBytes = estimateJsonPayloadBytes(payload);
+  const maxRequestBytes = connectorMaxRequestBytes();
+  if (maxRequestBytes !== null && estimatedPayloadBytes !== null && estimatedPayloadBytes > maxRequestBytes) {
+    setStatus(
+      'warning',
+      `Log Email aborted: estimated payload ${estimatedPayloadBytes} bytes exceeds connector limit ${maxRequestBytes} bytes. Reduce attachments and retry.`
+    );
+    return;
+  }
 
   try {
     const result = await apiRequest('/email/log', {
@@ -1027,6 +1403,22 @@ async function logEmail() {
         : '';
     setStatus('success', `Email logged: ${rec ? rec.id : 'ok'}.${attachmentStatus}`, result.requestId || '');
   } catch (error) {
+    if (error.status === 413) {
+      const details =
+        error && error.payload && error.payload.error && error.payload.error.details && typeof error.payload.error.details === 'object'
+          ? error.payload.error.details
+          : {};
+      const limitBytes = toPositiveIntOrNull(details.maxRequestBytes) || connectorMaxRequestBytes();
+      const requestBytes = toPositiveIntOrNull(details.contentLengthBytes) || estimatedPayloadBytes;
+      const requestText = requestBytes ? ` request=${requestBytes} bytes` : '';
+      const limitText = limitBytes ? ` limit=${limitBytes} bytes` : '';
+      setStatus(
+        'warning',
+        `Log Email failed: payload too large.${requestText}${limitText}. Reduce attachment size/count and retry.`,
+        error.requestId || ''
+      );
+      return;
+    }
     setStatus('error', `Log Email failed: ${error.message}`, error.requestId || '');
   }
 }
@@ -1046,6 +1438,10 @@ async function readOutlookContext() {
 
   const messageIdRaw = readSafeValue(() => item.internetMessageId, '');
   const messageId = typeof messageIdRaw === 'string' ? messageIdRaw : '';
+  const conversationIdRaw = readSafeValue(() => item.conversationId, '');
+  const conversationId = typeof conversationIdRaw === 'string' ? conversationIdRaw : '';
+  const itemIdRaw = readSafeValue(() => item.itemId, '');
+  const itemId = typeof itemIdRaw === 'string' ? itemIdRaw : '';
 
   const subject = String(readSafeValue(() => item.subject, '') || '').trim();
   const sentAtDate = readSafeValue(() => item.dateTimeCreated, null) || readSafeValue(() => item.dateTimeSent, null);
@@ -1061,6 +1457,8 @@ async function readOutlookContext() {
     messageId,
     subject,
     sentAt,
+    conversationId,
+    itemId,
     bodyText,
     attachments,
   };
@@ -1087,6 +1485,7 @@ async function hydrateFromOutlook(options = {}) {
     els.recipientEmailsInput.value = context.recipients;
     els.sentAtInput.value = context.sentAt.toISOString().slice(0, 16);
     updateAttachmentsInfo(state.lastOutlookAttachments);
+    updateQuickActionState();
 
     if (!suppressStatus) {
       setStatus('success', 'Loaded selected email context from Outlook.');
@@ -1193,6 +1592,15 @@ function wireEvents() {
   els.logoutBtn.addEventListener('click', confirmAndLogout);
   els.createContactBtn.addEventListener('click', createContact);
   els.createLeadBtn.addEventListener('click', createLead);
+  if (els.createCallBtn) {
+    els.createCallBtn.addEventListener('click', () => openLookupActivity('call'));
+  }
+  if (els.createMeetingBtn) {
+    els.createMeetingBtn.addEventListener('click', () => openLookupActivity('meeting'));
+  }
+  if (els.createTaskBtn) {
+    els.createTaskBtn.addEventListener('click', createTaskFromEmail);
+  }
   els.logEmailBtn.addEventListener('click', logEmail);
   if (els.toggleActionsBtn) {
     els.toggleActionsBtn.addEventListener('click', () => {
@@ -1203,6 +1611,17 @@ function wireEvents() {
   els.usernameInput.addEventListener('change', persistSession);
   if (els.statusLogoutBtn) {
     els.statusLogoutBtn.addEventListener('click', confirmAndLogout);
+  }
+  if (els.maxAttachmentBytesInput) {
+    els.maxAttachmentBytesInput.addEventListener('change', () => {
+      void enforceConnectorAttachmentLimit({ notify: true });
+    });
+  }
+  if (els.senderEmailInput) {
+    els.senderEmailInput.addEventListener('input', updateQuickActionState);
+  }
+  if (els.subjectInput) {
+    els.subjectInput.addEventListener('input', updateQuickActionState);
   }
 
   els.profileSelect.addEventListener('change', () => {
@@ -1273,8 +1692,13 @@ function init() {
   if (els.timelineResult) {
     setVisible(els.timelineResult, false);
   }
+  if (els.opportunitiesResult) {
+    els.opportunitiesResult.innerHTML = defaultOpportunitiesHintHtml();
+  }
+  setTaskActionHtml('');
   setActionsCollapsed(true);
   setCreateActionsVisible(false);
+  updateQuickActionState();
 
   if (!els.connectorBaseUrl.value) {
     els.connectorBaseUrl.value = DEFAULT_CONNECTOR_BASE_URL;

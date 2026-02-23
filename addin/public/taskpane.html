@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SuiteSidecar</title>
-    <link rel="stylesheet" href="./taskpane.css?v=0.3.0" />
+    <link rel="stylesheet" href="./taskpane.css?v=0.3.4" />
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script defer src="./taskpane.js?v=0.3.0"></script>
+    <script defer src="./taskpane.js?v=0.3.4"></script>
   </head>
   <body>
     <main class="app-shell">
@@ -41,7 +41,11 @@
       <section id="quickActionsBar" class="quick-actions is-hidden">
         <div class="row wrap">
           <button id="logEmailBtn" type="button">Log Email</button>
+          <button id="createCallBtn" type="button" disabled>Create Call</button>
+          <button id="createMeetingBtn" type="button" disabled>Create Meeting</button>
+          <button id="createTaskBtn" type="button" disabled>Create Task</button>
         </div>
+        <p id="taskActionResult" class="hint action-result"></p>
       </section>
 
       <section id="actionsCard" class="card is-collapsed">
@@ -101,6 +105,13 @@
         </div>
         <div id="timelineResult" class="result-box timeline-box is-hidden">
           <p class="hint">No timeline loaded.</p>
+        </div>
+      </section>
+
+      <section id="opportunitiesCard" class="card">
+        <h2>Opportunities</h2>
+        <div id="opportunitiesResult" class="result-box">
+          <p class="hint">No opportunities loaded.</p>
         </div>
       </section>
 

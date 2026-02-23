@@ -1,5 +1,29 @@
 # SuiteSidecar Changelog
 
+## v0.5 feature snapshot (2026-02-23)
+
+### Connector
+- Added lookup action deeplinks for pre-related Calls/Meetings create forms.
+- Added `POST /tasks/from-email` with idempotent dedup (`message ids`) and task provenance metadata.
+- Added `GET /opportunities/by-context` for lightweight latest-opportunities panel data.
+
+### Add-in
+- Added quick actions: `Create Call`, `Create Meeting`, `Create Task`.
+- Added opportunities panel rendering (latest 5 + `View all` link).
+- Added task-create result UX (`Task created` / `Task already exists` + `Open Task`).
+
+## v0.4 hardening snapshot (2026-02-22)
+
+### Connector
+- Added deterministic `413 payload_too_large` handling for oversized `/email/log` requests.
+- Added runtime request/attachment limits to `/version` response (`limits.*`).
+- Added optional env guardrails `SUITESIDECAR_MAX_REQUEST_BYTES` and `SUITESIDECAR_MAX_ATTACHMENT_BYTES`.
+
+### Add-in
+- Added connector runtime-limit sync from `/version`.
+- Added client-side payload-size preflight before `/email/log`.
+- Added explicit `413` user-facing handling with size guidance.
+
 ## v0.2 implementation snapshot (2026-02-21)
 
 ### Connector
