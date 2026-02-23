@@ -13,6 +13,12 @@ SuiteSidecar has two runtime parts:
 
 The add-in never calls SuiteCRM directly. It calls the connector, and the connector handles SuiteCRM auth, API shaping, and security controls.
 
+Profile handling:
+
+- Connector may expose one or many profiles.
+- If exactly one profile is configured, login can proceed without explicit `profileId`.
+- If multiple profiles are configured, profile selection is required.
+
 ## What It Is Good For (Daily Use)
 
 In normal email handling, users can:
@@ -174,6 +180,22 @@ cd addin
 
 This creates `addin/manifest/suitesidecar.local.xml` (gitignored).
 
+Optional split-host mode:
+
+```bash
+cd addin
+./scripts/make-local-manifest.sh https://addin.example.com https://api.example.com
+```
+
+This keeps add-in assets on the first host and injects connector startup URL (`connectorBaseUrl`) for the second host.
+
+Startup defaults:
+
+- Connector Base URL defaults to the taskpane host (`window.location.origin`), so single-site deployments usually need no manual connector URL input.
+- Optional override: append `connectorBaseUrl` query parameter to taskpane URL in the manifest.
+  Example: `.../addin/taskpane.html?v=0.4.1&connectorBaseUrl=https%3A%2F%2Fapi.example.com`
+- If an older session snapshot still contains placeholder `https://suitesidecar.example.com`, it is auto-migrated to current host on startup.
+
 ### 8) Deploy add-in in Microsoft 365 admin center
 
 Use centralized deployment (Integrated apps / custom Office add-in upload) and upload:
@@ -186,8 +208,9 @@ Assign users/groups, then wait for propagation.
 
 1. Open email in read mode.
 2. Open SuiteSidecar taskpane.
-3. Load profiles, login, run lookup.
-4. Validate Create Contact/Lead, Log Email, Create Task, and deeplinks.
+3. Login and run lookup.
+4. If connector has multiple profiles, select profile from dropdown first. If connector has one profile, dropdown is hidden and profile is auto-selected.
+5. Validate Create Contact/Lead, Log Email, Create Task, and deeplinks.
 
 ## Security Basics
 

@@ -40,17 +40,20 @@
 - Finalize supported Outlook host matrix and host-specific fallback behavior.
 - Stabilize auto-lookup and item-change handling across Outlook Desktop/Web hosts.
 - Add BCC-only recipient fallback to mailbox/account owner when visible recipients are unavailable.
+- Simplify single-site login UX: auto-use manifest host as connector URL, hide profile selector when only one profile exists, keep selector for multi-profile setups.
 - Improve user-facing status clarity for auth, lookup, and attachment outcomes.
 - Keep workflow compact while preserving operational transparency for support.
 
 ## v0.6 - Security Baseline (Enterprise Foundation)
 - Harden session/token lifecycle (expiry, cleanup, storage policy, invalidation path).
+- Define pluggable state-storage interfaces for sessions, dedup/action logs, and rate-limit counters; keep filesystem as local/dev baseline.
 - Implement CRM token refresh or deterministic re-auth flow with clear UI signaling.
 - Add rate limiting on high-risk endpoints (`/auth/login`, `/email/log`, create endpoints).
 - Introduce structured audit events for login/logout/create/log/conflict/error flows.
 - Define key rotation procedure and incident-response minimum runbook.
 
 ## v0.7 - Governance and Policy Controls
+- Deliver database-backed session/token state (production target), with migration and rollback runbooks from filesystem mode.
 - Add server-enforced policy controls for logging behavior (body, attachments, limits).
 - Add readiness checks beyond liveness (config/env/profile/runtime prerequisites).
 - Improve supportability with sanitized diagnostic bundle and incident hooks.
@@ -60,18 +63,21 @@
 - Add optional enterprise SSO path (OIDC/SAML-compatible) with secure fallback login.
 - Introduce RBAC for administrative/configuration operations.
 - Add session governance improvements (revocation strategy, session visibility controls).
+- Move dedup/action log and policy/audit event persistence to database-backed storage with profile scoping and retention controls.
 - Expand audit coverage for identity and admin actions.
 
 ## v0.9 - Compatibility and SLO Readiness
 - Define and enforce API compatibility/deprecation policy for v1.0 stabilization.
 - Separate product version and API contract version semantics explicitly.
 - Add contract-diff test gates and expanded CI quality gates.
+- Validate multi-node operation with shared DB state, including backup/restore and migration checks in CI/smoke paths.
 - Define baseline service metrics and alerting targets (latency, success/error rates).
 
 ## v1.0 - Enterprise Minimum Complete Product
 - Ship a security-hardened, auditable, supportable Outlook-to-CRM integration baseline.
 - Publish clear supported-host/client matrix and deployment model.
 - Finalize operational acceptance criteria: monitoring, alerts, runbooks, rollback.
+- Set database-backed state as production default/acceptance; keep filesystem mode documented only as non-HA fallback.
 - Freeze stable API contract and provide upgrade/migration notes.
 
 ## Deferred Beyond v1.0

@@ -24,11 +24,13 @@ const state = {
 const els = {};
 const SESSION_STORAGE_KEY = 'suitesidecar.session';
 const DEFAULT_CONNECTOR_BASE_URL = 'https://suitesidecar.example.com';
+const CONNECTOR_BASE_URL_QUERY_KEY = 'connectorBaseUrl';
 
 function initElements() {
   const ids = [
     'connectorBaseUrl',
     'loadProfilesBtn',
+    'profileSelectRow',
     'profileSelect',
     'usernameInput',
     'passwordInput',
@@ -150,6 +152,24 @@ function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
 
+function startupConnectorBaseUrl() {
+  const params = new URLSearchParams(window.location.search || '');
+  const queryBaseUrl = normalizeBaseUrl(params.get(CONNECTOR_BASE_URL_QUERY_KEY) || '');
+  if (queryBaseUrl) {
+    return queryBaseUrl;
+  }
+
+  const protocol = String(window.location && window.location.protocol ? window.location.protocol : '').toLowerCase();
+  if (protocol === 'https:' || protocol === 'http:') {
+    const origin = normalizeBaseUrl(window.location.origin || '');
+    if (origin && origin !== 'null') {
+      return origin;
+    }
+  }
+
+  return DEFAULT_CONNECTOR_BASE_URL;
+}
+
 function normalizeConnectorRuntimeLimits(rawLimits) {
   const source = rawLimits && typeof rawLimits === 'object' ? rawLimits : {};
   const maxRequestBytes = toPositiveIntOrNull(source.maxRequestBytes);
@@ -198,7 +218,21 @@ function enforceConnectorAttachmentLimit(options = {}) {
 }
 
 function activeProfileId() {
-  return String(els.profileSelect.value || '').trim();
+  const selected = String(els.profileSelect.value || '').trim();
+  if (selected) {
+    return selected;
+  }
+
+  const restored = String(state.restoreProfileId || '').trim();
+  if (restored) {
+    return restored;
+  }
+
+  if (Array.isArray(state.profiles) && state.profiles.length === 1) {
+    return String(state.profiles[0] && state.profiles[0].id ? state.profiles[0].id : '').trim();
+  }
+
+  return '';
 }
 
 function isTokenExpired() {
@@ -323,7 +357,18 @@ function restoreSession() {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
       if (typeof parsed.baseUrl === 'string' && parsed.baseUrl) {
-        els.connectorBaseUrl.value = parsed.baseUrl;
+        const restoredBaseUrl = normalizeBaseUrl(parsed.baseUrl);
+        const startupBaseUrl = startupConnectorBaseUrl();
+        // Auto-migrate legacy placeholder snapshot value to deployment host.
+        if (
+          restoredBaseUrl === DEFAULT_CONNECTOR_BASE_URL &&
+          startupBaseUrl &&
+          startupBaseUrl !== DEFAULT_CONNECTOR_BASE_URL
+        ) {
+          els.connectorBaseUrl.value = startupBaseUrl;
+        } else {
+          els.connectorBaseUrl.value = restoredBaseUrl;
+        }
       }
       if (typeof parsed.token === 'string') {
         state.token = parsed.token;
@@ -535,6 +580,14 @@ async function apiRequest(path, options = {}) {
   return { payload, requestId };
 }
 
+function refreshProfileSelectorVisibility() {
+  const showProfileSelector = Array.isArray(state.profiles) && state.profiles.length > 1;
+  setVisible(els.profileSelectRow, showProfileSelector);
+  if (els.profileSelect) {
+    els.profileSelect.disabled = !showProfileSelector;
+  }
+}
+
 function renderProfiles() {
   const previous = state.restoreProfileId || activeProfileId();
   els.profileSelect.innerHTML = '';
@@ -550,6 +603,8 @@ function renderProfiles() {
   if (!els.profileSelect.value && state.profiles.length) {
     els.profileSelect.value = state.profiles[0].id;
   }
+  state.restoreProfileId = activeProfileId();
+  refreshProfileSelectorVisibility();
   updateSessionInfo();
 }
 
@@ -1193,25 +1248,37 @@ async function login() {
   const username = String(els.usernameInput.value || '').trim();
   const password = String(els.passwordInput.value || '');
 
-  if (!profileId || !username || !password) {
-    setStatus('warning', 'Profile, username and password are required for login.');
+  if (!username || !password) {
+    setStatus('warning', 'Username and password are required for login.');
+    return;
+  }
+  if (!profileId && Array.isArray(state.profiles) && state.profiles.length > 1) {
+    setStatus('warning', 'Profile is required when connector has multiple profiles.');
     return;
   }
 
   try {
     setStatus('info', 'Authenticating...');
+    const payload = {
+      username,
+      password,
+    };
+    if (profileId) {
+      payload.profileId = profileId;
+    }
     const result = await apiRequest('/auth/login', {
       method: 'POST',
       auth: false,
-      body: {
-        profileId,
-        username,
-        password,
-      },
+      body: payload,
     });
 
     state.token = String(result.payload && result.payload.token ? result.payload.token : '');
     state.tokenExpiresAt = String(result.payload && result.payload.tokenExpiresAt ? result.payload.tokenExpiresAt : '');
+    state.restoreProfileId = String(
+      result.payload && result.payload.profileId
+        ? result.payload.profileId
+        : profileId
+    ).trim();
     persistSession();
     updateSessionInfo();
     setStatus('success', 'Login successful.', result.requestId || '');
@@ -1912,8 +1979,8 @@ function wireEvents() {
 
 async function restoreConnectionOnStartup() {
   const baseUrl = normalizeBaseUrl(els.connectorBaseUrl.value);
-  if (!baseUrl || baseUrl === DEFAULT_CONNECTOR_BASE_URL) {
-    setStatus('info', 'Ready. Configure connector, load profiles, then login.');
+  if (!baseUrl) {
+    setStatus('info', 'Ready. Configure connector URL, then login.');
     return;
   }
 
@@ -1969,9 +2036,10 @@ function init() {
   setActionsCollapsed(true);
   setCreateActionsVisible(false);
   updateQuickActionState();
+  refreshProfileSelectorVisibility();
 
   if (!els.connectorBaseUrl.value) {
-    els.connectorBaseUrl.value = DEFAULT_CONNECTOR_BASE_URL;
+    els.connectorBaseUrl.value = startupConnectorBaseUrl();
   }
 
   Promise.resolve(restoreConnectionOnStartup()).catch((error) => {

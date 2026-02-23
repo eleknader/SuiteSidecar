@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SuiteSidecar</title>
-    <link rel="stylesheet" href="./taskpane.css?v=0.4.0" />
+    <link rel="stylesheet" href="./taskpane.css?v=0.4.1" />
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script defer src="./taskpane.js?v=0.4.0"></script>
+    <script defer src="./taskpane.js?v=0.4.1"></script>
   </head>
   <body>
     <main class="app-shell">
@@ -18,8 +18,10 @@
           <button id="loadProfilesBtn" type="button">Load Profiles</button>
         </div>
 
-        <label for="profileSelect">Profile</label>
-        <select id="profileSelect"></select>
+        <div id="profileSelectRow">
+          <label for="profileSelect">Profile</label>
+          <select id="profileSelect"></select>
+        </div>
       </section>
 
       <section id="loginCard" class="card">

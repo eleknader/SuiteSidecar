@@ -5,6 +5,7 @@ This folder contains the Outlook taskpane MVP vertical slice.
 ## Implemented flow
 
 - Load profiles from connector: `GET /profiles`
+- Hide profile dropdown when connector returns exactly one profile (auto-select); show dropdown only for multi-profile connectors
 - Login: `POST /auth/login`
 - Logout: `POST /auth/logout`
 - Lookup sender: `GET /lookup/by-email`
@@ -21,6 +22,7 @@ This folder contains the Outlook taskpane MVP vertical slice.
 - Add-in preflights oversized `/email/log` payloads and handles server `413 payload_too_large` explicitly
 - Auto-lookup on item change via `Office.EventType.ItemChanged` (after login)
 - Profile/connector changes clear local session and require re-login
+- Connector base URL defaults to taskpane host origin (manifest host); optional override via `connectorBaseUrl` query param
 
 ## Manifest split (public-safe + local-only)
 
@@ -37,6 +39,15 @@ Create local manifest:
 cd addin
 ./scripts/make-local-manifest.sh https://your-real-host.example
 ```
+
+Optional split-host mode (addin host + connector host):
+
+```bash
+cd addin
+./scripts/make-local-manifest.sh https://addin.example.com https://api.example.com
+```
+
+The second argument is URL-encoded into taskpane startup parameter `connectorBaseUrl`.
 
 ## Local static preview (browser only)
 
@@ -79,7 +90,8 @@ Published web files:
    - `Get Add-ins` -> `My add-ins` -> `Add a custom add-in` -> `Add from file`.
    - Upload `addin/manifest/suitesidecar.local.xml`.
 5. Open an email in read mode and launch SuiteSidecar from the ribbon.
-6. Load profiles, login, then run lookup/create/log actions.
+6. Login, then run lookup/create/log actions.
+   If connector has multiple profiles, select profile first; for single-profile connector, selector is hidden.
 
 Outlook Desktop note:
 - If the task pane disappears when selecting another email, pin the pane from the add-in title bar (pushpin icon).

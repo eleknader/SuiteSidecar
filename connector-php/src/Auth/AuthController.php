@@ -31,15 +31,25 @@ final class AuthController
         $username = trim((string) ($payload['username'] ?? ''));
         $password = (string) ($payload['password'] ?? '');
 
-        if ($profileId === '' || $username === '' || $password === '') {
+        if ($username === '' || $password === '') {
             Response::error('bad_request', 'Missing required login fields', 400);
             return;
         }
 
-        $profile = $this->profileRegistry->getById($profileId);
-        if ($profile === null) {
-            Response::error('bad_request', 'Unknown profileId', 400);
-            return;
+        if ($profileId === '') {
+            if ($this->profileRegistry->count() === 1) {
+                $profiles = $this->profileRegistry->all();
+                $profile = $profiles[0];
+            } else {
+                Response::error('bad_request', 'Missing profileId', 400);
+                return;
+            }
+        } else {
+            $profile = $this->profileRegistry->getById($profileId);
+            if ($profile === null) {
+                Response::error('bad_request', 'Unknown profileId', 400);
+                return;
+            }
         }
 
         if ($profile->apiFlavor !== 'suitecrm_v8_jsonapi') {
@@ -81,6 +91,7 @@ final class AuthController
         Response::json([
             'token' => $jwtData['token'],
             'tokenExpiresAt' => gmdate('c', (int) $jwtData['expiresAt']),
+            'profileId' => $profile->id,
             'user' => [
                 'id' => $subjectId,
                 'displayName' => $username,

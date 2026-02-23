@@ -5,7 +5,7 @@
            xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
            xsi:type="MailApp">
   <Id>f5de4b31-6f9c-4fd8-a3aa-a80172dc5f9f</Id>
-  <Version>0.4.0.0</Version>
+  <Version>0.4.1.0</Version>
   <ProviderName>SuiteSidecar</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="SuiteSidecar"/>
@@ -31,7 +31,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://suitesidecar.example.com/addin/taskpane.html?v=0.4.0"/>
+        <SourceLocation DefaultValue="https://suitesidecar.example.com/addin/taskpane.html?v=0.4.1"/>
         <RequestedHeight>450</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -91,7 +91,7 @@
           <bt:Image id="Icon.80" DefaultValue="https://suitesidecar.example.com/addin/assets/icon-80.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="Taskpane.Url" DefaultValue="https://suitesidecar.example.com/addin/taskpane.html?v=0.4.0"/>
+          <bt:Url id="Taskpane.Url" DefaultValue="https://suitesidecar.example.com/addin/taskpane.html?v=0.4.1"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="Group.Label" DefaultValue="SuiteSidecar"/>

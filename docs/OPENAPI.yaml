@@ -57,8 +57,10 @@ paths:
       tags: [Auth]
       summary: Login to a SuiteCRM profile and obtain a connector session token
       description: >
-        Authenticates the user against the selected SuiteCRM instance/profile and returns a
-        connector-issued bearer token. The connector stores SuiteCRM tokens server-side.
+        Authenticates the user against a SuiteCRM instance/profile and returns a connector-issued
+        bearer token. If connector has multiple configured profiles, `profileId` is required.
+        If connector has exactly one profile, `profileId` may be omitted and is resolved server-side.
+        The connector stores SuiteCRM tokens server-side.
       security: [] # public
       requestBody:
         required: true
@@ -377,7 +379,7 @@ components:
           example: "suitesidecar-connector-php"
         version:
           type: string
-          example: "0.4.0.0"
+          example: "0.4.1.0"
         apiVersion:
           type: string
           nullable: true
@@ -387,12 +389,12 @@ components:
           type: string
           nullable: true
           description: Optional add-in manifest version exposed for release diagnostics.
-          example: "0.4.0.0"
+          example: "0.4.1.0"
         addInAssetVersion:
           type: string
           nullable: true
           description: Optional add-in static asset cache-busting version.
-          example: "0.4.0"
+          example: "0.4.1"
         gitSha:
           type: string
           nullable: true
@@ -431,11 +433,13 @@ components:
     # ---------- Auth ----------
     LoginRequest:
       type: object
-      required: [profileId, username, password]
+      required: [username, password]
       properties:
         profileId:
           type: string
-          description: Connector profile id for the target SuiteCRM instance.
+          description: >
+            Connector profile id for the target SuiteCRM instance.
+            Required when connector has multiple profiles; optional when exactly one profile exists.
           example: "prod-eu-1"
         username:
           type: string
@@ -452,7 +456,7 @@ components:
 
     LoginResponse:
       type: object
-      required: [token, tokenExpiresAt, user]
+      required: [token, tokenExpiresAt, profileId, user]
       properties:
         token:
           type: string
@@ -460,6 +464,9 @@ components:
         tokenExpiresAt:
           type: string
           format: date-time
+        profileId:
+          type: string
+          description: Resolved connector profile id for the authenticated session.
         user:
           $ref: "#/components/schemas/ConnectorUser"
 
