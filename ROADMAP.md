@@ -39,6 +39,7 @@
 ## v0.5 - Host Compatibility and UX Reliability
 - Finalize supported Outlook host matrix and host-specific fallback behavior.
 - Stabilize auto-lookup and item-change handling across Outlook Desktop/Web hosts.
+- Add BCC-only recipient fallback to mailbox/account owner when visible recipients are unavailable.
 - Improve user-facing status clarity for auth, lookup, and attachment outcomes.
 - Keep workflow compact while preserving operational transparency for support.
 

@@ -714,6 +714,15 @@ function normalizeEmailAddress(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function readMailboxOwnerEmail() {
+  return String(
+    readSafeValue(
+      () => Office.context.mailbox.userProfile.emailAddress,
+      ''
+    ) || ''
+  ).trim();
+}
+
 function readSafeValue(reader, fallbackValue) {
   try {
     const value = reader();
@@ -740,12 +749,30 @@ function readSafeRecipientEntries(item, fieldName = 'to') {
 
 function readSafeRecipients(item) {
   const toEntries = readSafeRecipientEntries(item, 'to');
-  if (!toEntries.length) {
-    return '';
+  const ccEntries = readSafeRecipientEntries(item, 'cc');
+  const bccEntries = readSafeRecipientEntries(item, 'bcc');
+  const allEntries = toEntries.concat(ccEntries).concat(bccEntries);
+
+  if (!allEntries.length) {
+    return readMailboxOwnerEmail();
   }
-  return toEntries
-    .map((entry) => entry.email)
-    .join(', ');
+
+  const seenEmails = new Set();
+  const dedupedEmails = allEntries
+    .map((entry) => String(entry && entry.email ? entry.email : '').trim())
+    .filter((email) => {
+      if (!email) {
+        return false;
+      }
+      const normalized = normalizeEmailAddress(email);
+      if (seenEmails.has(normalized)) {
+        return false;
+      }
+      seenEmails.add(normalized);
+      return true;
+    });
+
+  return dedupedEmails.join(', ');
 }
 
 function resolveLookupTarget(fromEmail, fromName, recipientEntries, ccEntries = []) {
@@ -755,11 +782,7 @@ function resolveLookupTarget(fromEmail, fromName, recipientEntries, ccEntries = 
     .concat(Array.isArray(recipientEntries) ? recipientEntries : [])
     .concat(Array.isArray(ccEntries) ? ccEntries : []);
 
-  const mailboxEmail = normalizeEmailAddress(
-    window.Office && Office.context && Office.context.mailbox && Office.context.mailbox.userProfile
-      ? Office.context.mailbox.userProfile.emailAddress
-      : ''
-  );
+  const mailboxEmail = normalizeEmailAddress(readMailboxOwnerEmail());
   const normalizedSender = normalizeEmailAddress(sender);
   const senderLooksLikeCurrentUser =
     normalizedSender !== '' && mailboxEmail !== '' && normalizedSender === mailboxEmail;
