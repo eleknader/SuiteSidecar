@@ -16,7 +16,7 @@ This folder contains the Outlook taskpane MVP vertical slice.
 - Create Task from email: `POST /tasks/from-email`
 - Opportunities panel: `GET /opportunities/by-context`
 - Log Email options: `storeBody`, `storeAttachments`, `maxAttachmentBytes`
-- Keep requestId in API payloads/logs only (not shown in taskpane UI)
+- Keep requestId out of visible status text; expose `Copy Debug Info` for support triage payload export
 - Add-in aligns attachment size control to connector `/version` runtime limits when available
 - Add-in preflights oversized `/email/log` payloads and handles server `413 payload_too_large` explicitly
 - Auto-lookup on item change via `Office.EventType.ItemChanged` (after login)

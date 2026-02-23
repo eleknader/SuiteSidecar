@@ -23,7 +23,7 @@
 - Attachment defaults updated to `storeAttachments=true` and `maxAttachmentBytes=5242880` (5 MB).
 - Release/version hygiene completed in manifests and taskpane cache-busting URLs.
 
-## v0.4 - Release Hardening and Operability
+## v0.4 - Implemented (validated 2026-02-23)
 - Consolidate repeatable release flow for connector + add-in artifacts.
 - Improve support diagnostics and runbooks around `requestId`-based triage.
 - Expand smoke/e2e coverage for timeline + attachments (including skip/limit scenarios).

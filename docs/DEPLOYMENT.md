@@ -48,7 +48,7 @@ Override target in development (for example local PHP server):
 SMOKE_SCHEME=http SMOKE_HOST=suitesidecar.local SMOKE_IP=127.0.0.1 SMOKE_PORT=18080 ops/scripts/smoke.sh
 ```
 
-Run authenticated end-to-end checks (login + lookup + create + email log duplicate conflict):
+Run authenticated end-to-end checks (login + lookup/timeline + create + task dedup + opportunities + attachment skip + `413` envelope limit):
 
 ```bash
 E2E_USERNAME="admin" E2E_PASSWORD="your-password" ops/scripts/e2e-auth.sh
@@ -148,6 +148,14 @@ Optional token lifetime override (default: 8h):
 
 ```bash
 export SUITESIDECAR_JWT_TTL_SECONDS="28800"
+```
+
+Optional version metadata surfaced in `/version`:
+
+```bash
+export APP_VERSION="0.3.6.0"
+export SUITESIDECAR_ADDIN_MANIFEST_VERSION="0.3.6.0"
+export SUITESIDECAR_ADDIN_ASSET_VERSION="0.3.6"
 ```
 
 ## API smoke tests (normal DNS path)
@@ -361,6 +369,12 @@ bash ops/scripts/package-addin.sh
 bash ops/scripts/publish-addin.sh
 ```
 
+For combined connector + add-in release packaging (single artifact):
+
+```bash
+bash ops/scripts/package-release.sh
+```
+
 If successful, artifacts are created under `dist/addin/`:
 
 - `dist/addin/stage/sideload/suitesidecar.xml`
@@ -370,6 +384,7 @@ If successful, artifacts are created under `dist/addin/`:
 
 The script fails if the manifest still contains placeholder URLs.
 `publish-addin.sh` also deploys files into `connector-php/public/addin/`.
+`package-release.sh` creates a combined package under `dist/release/`.
 
 ## Outlook sideload (OWA/Desktop)
 

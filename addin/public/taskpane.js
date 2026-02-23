@@ -17,6 +17,8 @@ const state = {
   itemChangedHandlerRegistered: false,
   autoLookupTimer: null,
   restoreProfileId: '',
+  lastApiTrace: null,
+  lastDebugInfo: null,
 };
 
 const els = {};
@@ -72,11 +74,59 @@ function initElements() {
     'statusBox',
     'statusMessage',
     'statusRequestId',
+    'statusDebugRow',
+    'copyDebugBtn',
+    'statusDebugHint',
   ];
 
   for (const id of ids) {
     els[id] = document.getElementById(id);
   }
+}
+
+function refreshStatusDebug() {
+  if (!els.statusDebugRow || !els.statusDebugHint) {
+    return;
+  }
+
+  if (!state.lastDebugInfo) {
+    setVisible(els.statusDebugRow, false);
+    els.statusDebugHint.textContent = '';
+    return;
+  }
+
+  const statusText = state.lastDebugInfo.status ? `HTTP ${state.lastDebugInfo.status}` : 'HTTP n/a';
+  const pathText = state.lastDebugInfo.path || '/unknown';
+  const methodText = state.lastDebugInfo.method || 'GET';
+  const requestIdText = state.lastDebugInfo.requestId ? 'requestId captured' : 'requestId unavailable';
+  els.statusDebugHint.textContent = `${methodText} ${pathText} ${statusText} (${requestIdText})`;
+  setVisible(els.statusDebugRow, true);
+}
+
+function clearStatusDebug() {
+  state.lastDebugInfo = null;
+  refreshStatusDebug();
+}
+
+function rememberStatusDebug(message, requestId = '') {
+  const trace = state.lastApiTrace && typeof state.lastApiTrace === 'object' ? state.lastApiTrace : null;
+  const resolvedRequestId = String(requestId || (trace && trace.requestId) || '').trim();
+  if (!resolvedRequestId) {
+    clearStatusDebug();
+    return;
+  }
+
+  state.lastDebugInfo = {
+    timestamp: new Date().toISOString(),
+    uiMessage: String(message || '').trim(),
+    requestId: resolvedRequestId,
+    status: trace && Number.isFinite(trace.status) ? trace.status : null,
+    path: trace && trace.path ? trace.path : '',
+    method: trace && trace.method ? trace.method : '',
+    profileId: trace && trace.profileId ? trace.profileId : activeProfileId(),
+    connectorBaseUrl: normalizeBaseUrl(els.connectorBaseUrl ? els.connectorBaseUrl.value : ''),
+  };
+  refreshStatusDebug();
 }
 
 function setStatus(kind, message, requestId = '') {
@@ -88,6 +138,11 @@ function setStatus(kind, message, requestId = '') {
   if (els.statusRequestId) {
     // Keep requestId available in the function signature for diagnostics, but do not surface it in the UI.
     els.statusRequestId.textContent = '';
+  }
+  if (kind === 'error' || kind === 'warning') {
+    rememberStatusDebug(message, requestId);
+  } else if (kind !== 'info' || message !== 'Debug info copied to clipboard.') {
+    clearStatusDebug();
   }
 }
 
@@ -346,6 +401,66 @@ function parseJsonSafe(text) {
   }
 }
 
+async function copyTextToClipboard(text) {
+  const value = String(text || '');
+  if (!value) {
+    throw new Error('No text to copy.');
+  }
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', 'readonly');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  if (!copied) {
+    throw new Error('Clipboard write failed in this host.');
+  }
+}
+
+function buildStatusDebugPayload() {
+  if (!state.lastDebugInfo) {
+    return null;
+  }
+
+  const payload = {
+    timestamp: state.lastDebugInfo.timestamp || new Date().toISOString(),
+    requestId: state.lastDebugInfo.requestId || '',
+    status: state.lastDebugInfo.status,
+    method: state.lastDebugInfo.method || '',
+    path: state.lastDebugInfo.path || '',
+    profileId: state.lastDebugInfo.profileId || '',
+    connectorBaseUrl: state.lastDebugInfo.connectorBaseUrl || '',
+    uiMessage: state.lastDebugInfo.uiMessage || '',
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+async function copyStatusDebugInfo() {
+  const text = buildStatusDebugPayload();
+  if (!text) {
+    setStatus('warning', 'No debug info available to copy.');
+    return;
+  }
+
+  try {
+    await copyTextToClipboard(text);
+    setStatus('info', 'Debug info copied to clipboard.');
+    refreshStatusDebug();
+  } catch (error) {
+    setStatus('warning', `Failed to copy debug info: ${error.message}`);
+  }
+}
+
 async function apiRequest(path, options = {}) {
   const baseUrl = normalizeBaseUrl(els.connectorBaseUrl.value);
   if (!baseUrl) {
@@ -394,6 +509,14 @@ async function apiRequest(path, options = {}) {
     (payload && payload.requestId) ||
     response.headers.get('x-request-id') ||
     '';
+  state.lastApiTrace = {
+    timestamp: new Date().toISOString(),
+    method,
+    path: `${url.pathname}${url.search}`,
+    status: response.status,
+    requestId,
+    profileId: headerProfileId || activeProfileId(),
+  };
 
   if (!response.ok) {
     const message =
@@ -1673,6 +1796,11 @@ function wireEvents() {
   if (els.statusLogoutBtn) {
     els.statusLogoutBtn.addEventListener('click', confirmAndLogout);
   }
+  if (els.copyDebugBtn) {
+    els.copyDebugBtn.addEventListener('click', () => {
+      void copyStatusDebugInfo();
+    });
+  }
   if (els.maxAttachmentBytesInput) {
     els.maxAttachmentBytesInput.addEventListener('change', () => {
       void enforceConnectorAttachmentLimit({ notify: true });
@@ -1746,6 +1874,7 @@ async function restoreConnectionOnStartup() {
 
 function init() {
   initElements();
+  clearStatusDebug();
   restoreSession();
   wireEvents();
   updateSessionInfo();

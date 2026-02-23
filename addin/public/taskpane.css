@@ -174,6 +174,27 @@ button:disabled {
   display: none;
 }
 
+.status-debug {
+  margin-top: 6px;
+}
+
+#copyDebugBtn {
+  min-height: 28px;
+  padding: 4px 8px;
+  background: var(--surface-soft);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+#copyDebugBtn:hover {
+  background: #f3f2f1;
+  border-color: #bdbbb9;
+}
+
+#statusDebugHint {
+  margin: 0;
+}
+
 .result-box {
   margin-top: 8px;
   border: 1px solid var(--border);

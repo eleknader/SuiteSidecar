@@ -124,6 +124,19 @@ else
   mark_fail "GET /profiles -> ${code}" "$body" "$headers"
 fi
 
+# /version
+IFS='|' read -r code body headers < <(request "version" "GET" "/version" "" "" "")
+if [[ "${code}" == "200" ]]; then
+  limits_present="$(php -r '$d=json_decode((string)file_get_contents($argv[1]),true); echo isset($d["limits"]) && is_array($d["limits"]) ? "yes" : "no";' "$body" 2>/dev/null || true)"
+  if [[ "${limits_present}" == "yes" ]]; then
+    mark_pass "GET /version -> 200 (limits present)"
+  else
+    mark_fail "GET /version -> 200 (limits missing)" "$body" "$headers"
+  fi
+else
+  mark_fail "GET /version -> ${code}" "$body" "$headers"
+fi
+
 # /lookup/by-email (auth required in current connector flow)
 lookup_path="/lookup/by-email?profileId=example-dev&email=${EMAIL}"
 IFS='|' read -r code body headers < <(request "lookup" "GET" "${lookup_path}" "" "" "")
@@ -158,6 +171,24 @@ if [[ "${code}" == "401" ]]; then
   mark_pass "POST /entities/leads?profileId=example-dev -> 401"
 else
   mark_fail "POST /entities/leads?profileId=example-dev -> ${code}" "$body" "$headers"
+fi
+
+# /tasks/from-email (auth required)
+task_payload='{"message":{"graphMessageId":"AAMk-smoke","subject":"Smoke task","from":{"email":"sender@example.com"},"receivedDateTime":"2026-01-01T12:00:00Z"}}'
+IFS='|' read -r code body headers < <(request "task-create" "POST" "/tasks/from-email?profileId=example-dev" "${task_payload}" "" "")
+if [[ "${code}" == "401" ]]; then
+  mark_pass "POST /tasks/from-email?profileId=example-dev -> 401"
+else
+  mark_fail "POST /tasks/from-email?profileId=example-dev -> ${code}" "$body" "$headers"
+fi
+
+# /opportunities/by-context (auth required)
+opp_path="/opportunities/by-context?profileId=example-dev&personModule=Contacts&personId=smoke-contact"
+IFS='|' read -r code body headers < <(request "opps-context" "GET" "${opp_path}" "" "" "")
+if [[ "${code}" == "401" ]]; then
+  mark_pass "GET ${opp_path} -> 401"
+else
+  mark_fail "GET ${opp_path} -> ${code}" "$body" "$headers"
 fi
 
 # /auth/login only if endpoint exists

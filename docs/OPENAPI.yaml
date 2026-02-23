@@ -377,7 +377,22 @@ components:
           example: "suitesidecar-connector-php"
         version:
           type: string
+          example: "0.3.6.0"
+        apiVersion:
+          type: string
+          nullable: true
+          description: Stable API contract version (separate from product/build version).
           example: "0.1.0"
+        addInManifestVersion:
+          type: string
+          nullable: true
+          description: Optional add-in manifest version exposed for release diagnostics.
+          example: "0.3.6.0"
+        addInAssetVersion:
+          type: string
+          nullable: true
+          description: Optional add-in static asset cache-busting version.
+          example: "0.3.6"
         gitSha:
           type: string
           nullable: true

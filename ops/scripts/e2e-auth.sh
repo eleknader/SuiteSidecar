@@ -161,6 +161,20 @@ else
   mark_fail "GET ${lookup_path} -> ${code}" "$body" "$headers"
 fi
 
+# lookup with timeline include (expected 200 + timeline array)
+lookup_timeline_path="/lookup/by-email?profileId=${PROFILE_ID}&email=${LOOKUP_EMAIL}&include=timeline"
+IFS='|' read -r code body headers < <(request "lookup-timeline" "GET" "${lookup_timeline_path}" "" "${TOKEN}")
+if [[ "${code}" == "200" ]]; then
+  timeline_shape="$(parse_json_field "$body" 'echo (isset($d["match"]["timeline"]) && is_array($d["match"]["timeline"])) ? "array" : "missing";')"
+  if [[ "${timeline_shape}" == "array" ]]; then
+    mark_pass "GET ${lookup_timeline_path} -> 200 (timeline array)"
+  else
+    mark_fail "GET ${lookup_timeline_path} -> 200 (timeline missing)" "$body" "$headers"
+  fi
+else
+  mark_fail "GET ${lookup_timeline_path} -> ${code}" "$body" "$headers"
+fi
+
 # not found lookup (expected 200 with notFound=true)
 missing_email="no-match-${NOW_TS}@example.com"
 missing_lookup_path="/lookup/by-email?profileId=${PROFILE_ID}&email=${missing_email}"
@@ -201,6 +215,58 @@ else
   mark_fail "POST /entities/leads?profileId=${PROFILE_ID} -> ${code}" "$body" "$headers"
 fi
 
+# opportunities by context (expected 200)
+if [[ -n "${contact_id}" ]]; then
+  opp_path="/opportunities/by-context?profileId=${PROFILE_ID}&personModule=Contacts&personId=${contact_id}&limit=5"
+  IFS='|' read -r code body headers < <(request "opportunities-context" "GET" "${opp_path}" "" "${TOKEN}")
+  if [[ "${code}" == "200" ]]; then
+    items_shape="$(parse_json_field "$body" 'echo (isset($d["items"]) && is_array($d["items"])) ? "array" : "missing";')"
+    if [[ "${items_shape}" == "array" ]]; then
+      mark_pass "GET ${opp_path} -> 200 (items array)"
+    else
+      mark_fail "GET ${opp_path} -> 200 (items missing)" "$body" "$headers"
+    fi
+  else
+    mark_fail "GET ${opp_path} -> ${code}" "$body" "$headers"
+  fi
+fi
+
+# create task from email + dedup
+if [[ -n "${contact_id}" ]]; then
+  task_graph_id="smoke-graph-${NOW_TS}"
+  task_payload="$(php -r 'echo json_encode([
+    "message" => [
+      "graphMessageId" => $argv[1],
+      "subject" => "Task smoke ".$argv[2],
+      "from" => ["email" => "sender@example.com", "name" => "Smoke Sender"],
+      "receivedDateTime" => "2026-01-01T12:00:00Z",
+      "bodyPreview" => "Short preview"
+    ],
+    "context" => [
+      "personModule" => "Contacts",
+      "personId" => $argv[3]
+    ]
+  ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);' "${task_graph_id}" "${NOW_TS}" "${contact_id}")"
+  IFS='|' read -r code body headers < <(request "task-create-1" "POST" "/tasks/from-email?profileId=${PROFILE_ID}" "${task_payload}" "${TOKEN}")
+  if [[ "${code}" == "201" ]]; then
+    mark_pass "POST /tasks/from-email?profileId=${PROFILE_ID} -> 201"
+  else
+    mark_fail "POST /tasks/from-email?profileId=${PROFILE_ID} -> ${code}" "$body" "$headers"
+  fi
+
+  IFS='|' read -r code body headers < <(request "task-create-2" "POST" "/tasks/from-email?profileId=${PROFILE_ID}" "${task_payload}" "${TOKEN}")
+  if [[ "${code}" == "200" ]]; then
+    dedup_flag="$(parse_json_field "$body" 'echo isset($d["deduplicated"]) ? ($d["deduplicated"] ? "true" : "false") : "";')"
+    if [[ "${dedup_flag}" == "true" ]]; then
+      mark_pass "POST /tasks/from-email duplicate -> 200 (deduplicated=true)"
+    else
+      mark_fail "POST /tasks/from-email duplicate -> 200 (deduplicated!=true)" "$body" "$headers"
+    fi
+  else
+    mark_fail "POST /tasks/from-email duplicate -> ${code}" "$body" "$headers"
+  fi
+fi
+
 # log email (first time expected 201)
 if [[ -n "${contact_id}" ]]; then
   message_id="<smoke-${NOW_TS}@suitesidecar.local>"
@@ -218,6 +284,70 @@ if [[ -n "${contact_id}" ]]; then
     mark_pass "POST /email/log duplicate -> 409"
   else
     mark_fail "POST /email/log duplicate -> ${code}" "$body" "$headers"
+  fi
+
+  # log email with oversized attachment metadata + tiny maxAttachmentBytes (expected 201, attachment skipped)
+  attachment_message_id="<smoke-attach-${NOW_TS}@suitesidecar.local>"
+  attachment_payload="$(php -r 'echo json_encode([
+    "message" => [
+      "internetMessageId" => $argv[1],
+      "subject" => "Smoke attachment skip ".$argv[2],
+      "from" => ["email" => "sender@example.com"],
+      "to" => [["email" => "known.user@example.com"]],
+      "sentAt" => "2026-01-01T12:00:00Z",
+      "attachments" => [[
+        "name" => "big.txt",
+        "sizeBytes" => 2048,
+        "contentType" => "text/plain",
+        "contentBase64" => "U21va2UgQXR0YWNobWVudA=="
+      ]]
+    ],
+    "linkTo" => ["module" => "Contacts", "id" => $argv[3]],
+    "options" => ["storeAttachments" => true, "maxAttachmentBytes" => 10]
+  ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);' "${attachment_message_id}" "${NOW_TS}" "${contact_id}")"
+  IFS='|' read -r code body headers < <(request "email-log-attach-skip" "POST" "/email/log?profileId=${PROFILE_ID}" "${attachment_payload}" "${TOKEN}")
+  if [[ "${code}" == "201" ]]; then
+    mark_pass "POST /email/log with tiny maxAttachmentBytes -> 201"
+  else
+    mark_fail "POST /email/log with tiny maxAttachmentBytes -> ${code}" "$body" "$headers"
+  fi
+
+  # payload-too-large behavior (expected 413 when maxRequestBytes is known)
+  IFS='|' read -r code body headers < <(request "version" "GET" "/version" "" "${TOKEN}")
+  max_request_bytes=""
+  if [[ "${code}" == "200" ]]; then
+    max_request_bytes="$(parse_json_field "$body" 'echo $d["limits"]["maxRequestBytes"] ?? "";')"
+  fi
+
+  if [[ -n "${max_request_bytes}" && "${max_request_bytes}" =~ ^[0-9]+$ && "${max_request_bytes}" -gt 0 ]]; then
+    oversize_target=$((max_request_bytes + 4096))
+    oversized_message_id="<smoke-oversize-${NOW_TS}@suitesidecar.local>"
+    oversized_payload="$(php -r '$size=(int)$argv[1]; $messageId=$argv[2]; $contactId=$argv[3]; $body=str_repeat("A",$size); echo json_encode([
+      "message" => [
+        "internetMessageId" => $messageId,
+        "subject" => "Smoke oversized payload",
+        "from" => ["email" => "sender@example.com"],
+        "to" => [["email" => "known.user@example.com"]],
+        "sentAt" => "2026-01-01T12:00:00Z",
+        "bodyText" => $body
+      ],
+      "linkTo" => ["module" => "Contacts", "id" => $contactId],
+      "options" => ["storeBody" => true]
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);' "${oversize_target}" "${oversized_message_id}" "${contact_id}")"
+
+    IFS='|' read -r code body headers < <(request "email-log-oversize" "POST" "/email/log?profileId=${PROFILE_ID}" "${oversized_payload}" "${TOKEN}")
+    if [[ "${code}" == "413" ]]; then
+      err_code="$(parse_json_field "$body" 'echo $d["error"]["code"] ?? "";')"
+      if [[ "${err_code}" == "payload_too_large" ]]; then
+        mark_pass "POST /email/log oversized payload -> 413 payload_too_large"
+      else
+        mark_fail "POST /email/log oversized payload -> 413 (unexpected error code)" "$body" "$headers"
+      fi
+    else
+      mark_fail "POST /email/log oversized payload -> ${code}" "$body" "$headers"
+    fi
+  else
+    echo "SKIP: /email/log oversized payload check skipped because /version did not expose maxRequestBytes."
   fi
 else
   echo "SKIP: /email/log checks skipped because contact creation did not return an id."
