@@ -48,6 +48,40 @@ Outlook (Office.js add-in) -> SuiteSidecar Connector API (PHP) -> SuiteCRM v8 AP
 - Microsoft 365 admin rights for centralized add-in deployment
 - PHP/composer runtime for connector host
 
+## Apache Header Checklist (Important)
+
+If Apache headers are too strict or `Authorization` is stripped, Outlook add-in loading and connector auth will fail.
+
+Required behavior:
+
+- Preserve `Authorization` header to PHP
+- Do not block framing for `/addin/*` with global `X-Frame-Options`
+- If you set CSP, allow Microsoft host pages in `frame-ancestors`
+- Do not override connector CORS headers to something more restrictive than the app expects
+
+Example Apache settings:
+
+```apache
+# Pass Authorization to PHP/FPM (required for Bearer auth)
+SetEnvIfNoCase Authorization "^(.*)" HTTP_AUTHORIZATION=$1
+
+# Optional baseline hardening
+Header always set X-Content-Type-Options "nosniff"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+# Add-in pages must be iframe-compatible inside Outlook hosts
+<Location "/addin/">
+  Header always unset X-Frame-Options
+  Header always set Content-Security-Policy "frame-ancestors 'self' https://*.office.com https://*.office365.com https://*.outlook.com;"
+</Location>
+```
+
+Notes:
+
+- If your global vhost sets `X-Frame-Options DENY` or `SAMEORIGIN`, override/unset it for `/addin/*`.
+- If you already set CSP globally, merge `frame-ancestors` there instead of setting a second CSP header.
+- Connector CORS headers are currently set by `connector-php/public/index.php`.
+
 ## Quick Start (Admin)
 
 ### 1) Choose host model
