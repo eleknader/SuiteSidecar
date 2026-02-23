@@ -37,7 +37,7 @@ ENCODED_CONNECTOR_BASE_URL="$(
 )"
 
 sed "s|https://suitesidecar.example.com|${BASE_URL}|g" "${SOURCE_MANIFEST}" \
-  | sed "s|taskpane.html?v=0.4.1|taskpane.html?v=0.4.1\\&connectorBaseUrl=${ENCODED_CONNECTOR_BASE_URL}|g" \
+  | sed "s|taskpane.html?v=0.4.2|taskpane.html?v=0.4.2\\&amp;connectorBaseUrl=${ENCODED_CONNECTOR_BASE_URL}|g" \
   > "${TARGET_MANIFEST}"
 
 echo "Wrote local manifest: ${TARGET_MANIFEST}"

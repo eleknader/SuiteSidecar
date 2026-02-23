@@ -193,7 +193,7 @@ Startup defaults:
 
 - Connector Base URL defaults to the taskpane host (`window.location.origin`), so single-site deployments usually need no manual connector URL input.
 - Optional override: append `connectorBaseUrl` query parameter to taskpane URL in the manifest.
-  Example: `.../addin/taskpane.html?v=0.4.1&connectorBaseUrl=https%3A%2F%2Fapi.example.com`
+  Example: `.../addin/taskpane.html?v=0.4.2&connectorBaseUrl=https%3A%2F%2Fapi.example.com`
 - If an older session snapshot still contains placeholder `https://suitesidecar.example.com`, it is auto-migrated to current host on startup.
 
 ### 8) Deploy add-in in Microsoft 365 admin center
