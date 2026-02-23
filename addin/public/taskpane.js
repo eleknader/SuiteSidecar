@@ -11,6 +11,7 @@ const state = {
   lastOutlookSenderName: '',
   lastOutlookConversationId: '',
   lastOutlookItemId: '',
+  lastLookupEmail: '',
   lastOutlookContextKey: '',
   officeReady: false,
   itemChangedHandlerRegistered: false,
@@ -499,7 +500,7 @@ function buildOutlookContextKey(context) {
 }
 
 function resetActionsForContext(context) {
-  const names = splitName(context && context.senderName ? context.senderName : '');
+  const names = splitName(context && context.lookupName ? context.lookupName : (context && context.senderName ? context.senderName : ''));
 
   state.lastLookup = null;
   state.lastOutlookBodyText = '';
@@ -507,6 +508,7 @@ function resetActionsForContext(context) {
   state.lastOutlookSenderName = context && context.senderName ? String(context.senderName) : '';
   state.lastOutlookConversationId = context && context.conversationId ? String(context.conversationId) : '';
   state.lastOutlookItemId = context && context.itemId ? String(context.itemId) : '';
+  state.lastLookupEmail = context && context.lookupEmail ? String(context.lookupEmail) : '';
   els.lookupResult.innerHTML = defaultLookupHintHtml();
   if (els.timelineResult) {
     els.timelineResult.innerHTML = defaultTimelineHintHtml();
@@ -584,6 +586,10 @@ function parseRecipientEmails(raw) {
   return emails.map((email) => ({ email }));
 }
 
+function normalizeEmailAddress(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function readSafeValue(reader, fallbackValue) {
   try {
     const value = reader();
@@ -594,15 +600,61 @@ function readSafeValue(reader, fallbackValue) {
   }
 }
 
+function readSafeRecipientEntries(item, fieldName = 'to') {
+  const source = readSafeValue(() => item[fieldName], []);
+  if (!Array.isArray(source)) {
+    return [];
+  }
+
+  return source
+    .map((entry) => ({
+      name: String(readSafeValue(() => entry.displayName, '') || '').trim(),
+      email: String(readSafeValue(() => entry.emailAddress, '') || '').trim(),
+    }))
+    .filter((entry) => entry.email);
+}
+
 function readSafeRecipients(item) {
-  const toList = readSafeValue(() => item.to, []);
-  if (!Array.isArray(toList)) {
+  const toEntries = readSafeRecipientEntries(item, 'to');
+  if (!toEntries.length) {
     return '';
   }
-  return toList
-    .map((entry) => String(readSafeValue(() => entry.emailAddress, '') || '').trim())
-    .filter(Boolean)
+  return toEntries
+    .map((entry) => entry.email)
     .join(', ');
+}
+
+function resolveLookupTarget(fromEmail, fromName, recipientEntries, ccEntries = []) {
+  const sender = String(fromEmail || '').trim();
+  const senderName = String(fromName || '').trim();
+  const allRecipients = []
+    .concat(Array.isArray(recipientEntries) ? recipientEntries : [])
+    .concat(Array.isArray(ccEntries) ? ccEntries : []);
+
+  const mailboxEmail = normalizeEmailAddress(
+    window.Office && Office.context && Office.context.mailbox && Office.context.mailbox.userProfile
+      ? Office.context.mailbox.userProfile.emailAddress
+      : ''
+  );
+  const normalizedSender = normalizeEmailAddress(sender);
+  const senderLooksLikeCurrentUser =
+    normalizedSender !== '' && mailboxEmail !== '' && normalizedSender === mailboxEmail;
+
+  if (senderLooksLikeCurrentUser && allRecipients.length) {
+    const nonSelfRecipient = allRecipients.find((entry) => normalizeEmailAddress(entry.email) !== mailboxEmail);
+    const selected = nonSelfRecipient || allRecipients[0];
+    if (selected && selected.email) {
+      return {
+        lookupEmail: selected.email,
+        lookupName: String(selected.name || '').trim(),
+      };
+    }
+  }
+
+  return {
+    lookupEmail: sender,
+    lookupName: senderName,
+  };
 }
 
 function formatTimeline(payload) {
@@ -1046,6 +1098,10 @@ function confirmAndLogout() {
 }
 
 function buildLookupEmail() {
+  const override = String(state.lastLookupEmail || '').trim();
+  if (override) {
+    return override;
+  }
   const sender = String(els.senderEmailInput.value || '').trim();
   return sender;
 }
@@ -1434,6 +1490,9 @@ async function readOutlookContext() {
   const senderEmail = String(readSafeValue(() => from.emailAddress, '') || '').trim();
   const senderName = String(readSafeValue(() => from.displayName, '') || '').trim();
 
+  const toEntries = readSafeRecipientEntries(item, 'to');
+  const ccEntries = readSafeRecipientEntries(item, 'cc');
+  const lookupTarget = resolveLookupTarget(senderEmail, senderName, toEntries, ccEntries);
   const recipients = readSafeRecipients(item);
 
   const messageIdRaw = readSafeValue(() => item.internetMessageId, '');
@@ -1453,6 +1512,8 @@ async function readOutlookContext() {
   return {
     senderEmail,
     senderName,
+    lookupEmail: lookupTarget.lookupEmail || senderEmail,
+    lookupName: lookupTarget.lookupName || senderName,
     recipients,
     messageId,
     subject,
@@ -1618,7 +1679,10 @@ function wireEvents() {
     });
   }
   if (els.senderEmailInput) {
-    els.senderEmailInput.addEventListener('input', updateQuickActionState);
+    els.senderEmailInput.addEventListener('input', () => {
+      state.lastLookupEmail = '';
+      updateQuickActionState();
+    });
   }
   if (els.subjectInput) {
     els.subjectInput.addEventListener('input', updateQuickActionState);
