@@ -352,7 +352,7 @@ Optional SSO / Microsoft identity integration
 
 Whether to expose a profile-level switch for Notes vs Emails in future versions.
 
-Minimum supported Outlook clients (new Outlook vs classic vs Mac differences).
+Supported Outlook host matrix and fallback behavior are defined in `docs/DEPLOYMENT.md` (v0.5 baseline).
 
 ## 13. References
 

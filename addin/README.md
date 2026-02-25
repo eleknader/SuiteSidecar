@@ -17,7 +17,7 @@ This folder contains the Outlook taskpane MVP vertical slice.
 - Create Task from email: `POST /tasks/from-email`
 - Opportunities panel: `GET /opportunities/by-context`
 - Log Email options: `storeBody`, `storeAttachments`, `maxAttachmentBytes`
-- Keep requestId out of visible status text; expose `Copy Debug Info` for support triage payload export
+- Keep requestId out of visible status text; expose `Copy Debug Info` for support triage payload export (includes tenant-routing diagnostics when available: `resolvedHost`, `resolvedProfileId`)
 - Add-in aligns attachment size control to connector `/version` runtime limits when available
 - Add-in preflights oversized `/email/log` payloads and handles server `413 payload_too_large` explicitly
 - Auto-lookup on item change via `Office.EventType.ItemChanged` (after login)
@@ -96,6 +96,16 @@ Published web files:
 Outlook Desktop note:
 - If the task pane disappears when selecting another email, pin the pane from the add-in title bar (pushpin icon).
 - The manifest already enables pinning; without pinning, Outlook can close the pane on item change by design.
+
+## Supported hosts (v0.5)
+
+- OWA: full support (validated, pass)
+- New Outlook on Windows: full support (validated, pass)
+- Classic Outlook on Windows: full support (validated, pass)
+- Outlook Mac: not tested
+- Outlook mobile: not supported
+
+For host-specific fallback behavior (ItemChanged/attachment API fallback policy), see `docs/DEPLOYMENT.md`.
 
 ## Microsoft 365 propagation note
 

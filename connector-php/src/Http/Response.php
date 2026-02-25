@@ -7,6 +7,8 @@ namespace SuiteSidecar\Http;
 final class Response
 {
     private static ?string $requestId = null;
+    private static ?string $resolvedHost = null;
+    private static ?string $resolvedProfileId = null;
 
     public static function requestId(): string
     {
@@ -22,6 +24,7 @@ final class Response
 
         // Provide requestId also as header for easier troubleshooting
         header('X-Request-Id: ' . self::requestId());
+        self::applyRoutingHeaders();
 
         if (!array_key_exists('requestId', $data)) {
             $data['requestId'] = self::requestId();
@@ -44,5 +47,37 @@ final class Response
         self::json([
             'error' => $error,
         ], $status);
+    }
+
+    public static function setRoutingContext(?string $resolvedHost, ?string $resolvedProfileId): void
+    {
+        self::$resolvedHost = self::normalizeHeaderValue($resolvedHost);
+        self::$resolvedProfileId = self::normalizeHeaderValue($resolvedProfileId);
+    }
+
+    public static function setResolvedProfileId(?string $resolvedProfileId): void
+    {
+        self::$resolvedProfileId = self::normalizeHeaderValue($resolvedProfileId);
+    }
+
+    private static function applyRoutingHeaders(): void
+    {
+        if (self::$resolvedHost !== null) {
+            header('X-SuiteSidecar-Resolved-Host: ' . self::$resolvedHost);
+        }
+
+        if (self::$resolvedProfileId !== null) {
+            header('X-SuiteSidecar-Resolved-Profile: ' . self::$resolvedProfileId);
+        }
+    }
+
+    private static function normalizeHeaderValue(?string $value): ?string
+    {
+        $normalized = trim((string) $value);
+        if ($normalized === '' || preg_match('/[\r\n]/', $normalized) === 1) {
+            return null;
+        }
+
+        return $normalized;
     }
 }

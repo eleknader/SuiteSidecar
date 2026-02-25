@@ -442,6 +442,31 @@ The script fails if the manifest still contains placeholder URLs.
 `publish-addin.sh` also deploys files into `connector-php/public/addin/`.
 `package-release.sh` creates a combined package under `dist/release/`.
 
+## Supported Outlook Host Matrix (v0.5)
+
+Current support classification:
+
+| Outlook host | Support level | Validation status |
+| --- | --- | --- |
+| Outlook on the web (OWA) | Full support | Pass |
+| New Outlook (Windows) | Full support | Pass |
+| Outlook classic (Windows) | Full support | Pass |
+| Outlook Mac | Not tested | Not validated |
+| Outlook mobile | Not supported | Out of scope |
+
+Host-specific fallback behavior:
+
+- OWA / New Outlook Windows / Classic Outlook Windows:
+  - Normal flow is expected to work end-to-end (login, lookup, create/log actions, task/opportunity actions, debug export).
+  - If `ItemChanged` handler registration is not available in a specific runtime build, add-in keeps manual lookup flow and shows warning status.
+  - If attachment content API is unavailable/limited, add-in logs email without blocked workflow and reports attachment skip in status.
+- Outlook classic (Windows):
+  - Pin taskpane in read mode to keep pane visible while switching items.
+- Outlook Mac:
+  - Not validated yet; no compatibility commitment in current release.
+- Outlook mobile:
+  - Not supported in current release; do not treat behavior as a defect scope.
+
 ## Outlook sideload (OWA/Desktop)
 
 Prerequisites:
@@ -468,5 +493,9 @@ Validation after sideload:
 5. Add-in default for `maxAttachmentBytes` is `5242880` (5 MB). The add-in now auto-aligns this to connector `/version` runtime limits when available.
 6. `POST /email/log` returns `413 payload_too_large` when request size exceeds connector/PHP runtime limits.
 7. For failures, capture `requestId` from response header (`X-Request-Id`) or JSON error body.
+8. For tenant-routing triage, also capture:
+   - `X-SuiteSidecar-Resolved-Host`
+   - `X-SuiteSidecar-Resolved-Profile`
+   - add-in `Copy Debug Info` payload (`resolvedHost`, `resolvedProfileId`)
 
 For requestId-based incident handling, see `docs/SUPPORT.md`.

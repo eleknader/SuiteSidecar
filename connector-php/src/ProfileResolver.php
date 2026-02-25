@@ -19,6 +19,7 @@ final class ProfileResolver
     {
         $hostProfile = $this->resolveHostProfile($headers);
         if ($hostProfile !== null) {
+            Response::setResolvedProfileId($hostProfile->id);
             $requestedProfileId = $this->extractProfileId($query, $headers);
             if ($requestedProfileId !== null && $requestedProfileId !== $hostProfile->id) {
                 error_log(
@@ -48,6 +49,8 @@ final class ProfileResolver
             throw new ProfileResolutionException('Unknown profileId');
         }
 
+        Response::setResolvedProfileId($profile->id);
+
         return $profile;
     }
 
@@ -76,8 +79,11 @@ final class ProfileResolver
         }
 
         try {
-            return $this->profileRegistry->getByHost($requestHost);
+            $profile = $this->profileRegistry->getByHost($requestHost);
+            Response::setRoutingContext($requestHost, $profile?->id);
+            return $profile;
         } catch (InvalidArgumentException $e) {
+            Response::setRoutingContext($requestHost, null);
             throw new ProfileResolutionException($e->getMessage(), 0, $e);
         }
     }

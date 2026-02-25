@@ -7,16 +7,24 @@
 - Added `POST /tasks/from-email` with idempotent dedup (`message ids`) and task provenance metadata.
 - Added `GET /opportunities/by-context` for lightweight latest-opportunities panel data.
 - Added `/version` metadata fields for release diagnostics (`apiVersion`, optional add-in manifest/asset versions).
+- Added tenant-routing diagnostics headers for support triage:
+  - `X-SuiteSidecar-Resolved-Host`
+  - `X-SuiteSidecar-Resolved-Profile`
 
 ### Add-in
 - Added quick actions: `Create Call`, `Create Meeting`, `Create Task`.
 - Added opportunities panel rendering (latest 5 + `View all` link).
 - Added task-create result UX (`Task created` / `Task already exists` + `Open Task`).
 - Added recipient-first lookup target selection for sent-mail context (fallback to sender).
+- Extended `Copy Debug Info` payload with tenant-routing diagnostics (`resolvedHost`, `resolvedProfileId`).
 
 ### Ops
 - Added consolidated release packaging script `ops/scripts/package-release.sh` (connector + add-in artifacts).
 - Expanded smoke/e2e coverage for timeline include, task dedup, opportunities endpoint, and attachment/`413` behaviors.
+- Finalized and documented Outlook host support matrix + fallback policy:
+  - full support (pass): OWA, New Outlook Windows, Classic Outlook Windows
+  - not tested: Outlook Mac
+  - not supported: Outlook mobile
 
 ## v0.4 hardening snapshot (2026-02-22)
 

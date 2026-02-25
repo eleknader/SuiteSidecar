@@ -5,9 +5,13 @@ Use this for first-line troubleshooting. Always capture `requestId` from API err
 ## What to collect
 
 1. `requestId` from response header (`X-Request-Id`) or JSON error response.
-2. Endpoint and method (`/auth/login`, `/lookup/by-email`, `/email/log`, `/tasks/from-email`, `/opportunities/by-context`).
-3. HTTP status code.
-4. Timestamp (UTC) and profile id.
+2. Tenant-routing diagnostics when available:
+   - `X-SuiteSidecar-Resolved-Host`
+   - `X-SuiteSidecar-Resolved-Profile`
+   - Add-in `Copy Debug Info` payload fields `resolvedHost` and `resolvedProfileId`.
+3. Endpoint and method (`/auth/login`, `/lookup/by-email`, `/email/log`, `/tasks/from-email`, `/opportunities/by-context`).
+4. HTTP status code.
+5. Timestamp (UTC) and profile id.
 
 ## Login failures (`POST /auth/login`)
 

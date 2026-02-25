@@ -77,6 +77,8 @@ final class AuthController
             return;
         }
 
+        Response::setResolvedProfileId($profile->id);
+
         $this->oauthTokenProvider->setRequestId(Response::requestId());
 
         try {

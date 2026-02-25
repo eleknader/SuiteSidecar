@@ -7,6 +7,8 @@ info:
     This API mediates access to SuiteCRM and provides a stable, normalized contract.
     When `SUITESIDECAR_ALLOWED_ORIGINS` is configured, requests with disallowed `Origin`
     header are rejected with `403 forbidden`.
+    Tenant-routing diagnostics are exposed via response headers
+    `X-SuiteSidecar-Resolved-Host` and `X-SuiteSidecar-Resolved-Profile`.
 servers:
   - url: https://connector.example.com
     description: Production
@@ -358,39 +360,102 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  headers:
+    X-Request-Id:
+      description: Request correlation id for support/debugging.
+      schema:
+        type: string
+    X-SuiteSidecar-Resolved-Host:
+      description: Normalized request host used by connector tenant routing.
+      schema:
+        type: string
+    X-SuiteSidecar-Resolved-Profile:
+      description: Resolved profile id chosen by connector tenant routing/selection.
+      schema:
+        type: string
+
   responses:
     BadRequest:
       description: Bad request
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        X-SuiteSidecar-Resolved-Host:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Host"
+        X-SuiteSidecar-Resolved-Profile:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Profile"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     Unauthorized:
       description: Unauthorized
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        X-SuiteSidecar-Resolved-Host:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Host"
+        X-SuiteSidecar-Resolved-Profile:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Profile"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     Forbidden:
       description: Forbidden
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        X-SuiteSidecar-Resolved-Host:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Host"
+        X-SuiteSidecar-Resolved-Profile:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Profile"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     Conflict:
       description: Conflict (e.g. duplicate)
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        X-SuiteSidecar-Resolved-Host:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Host"
+        X-SuiteSidecar-Resolved-Profile:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Profile"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     PayloadTooLarge:
       description: Payload too large
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        X-SuiteSidecar-Resolved-Host:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Host"
+        X-SuiteSidecar-Resolved-Profile:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Profile"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     TooManyRequests:
       description: Rate limited
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        X-SuiteSidecar-Resolved-Host:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Host"
+        X-SuiteSidecar-Resolved-Profile:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Profile"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     ServerError:
       description: Server error
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        X-SuiteSidecar-Resolved-Host:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Host"
+        X-SuiteSidecar-Resolved-Profile:
+          $ref: "#/components/headers/X-SuiteSidecar-Resolved-Profile"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }

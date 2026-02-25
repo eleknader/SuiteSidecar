@@ -126,6 +126,8 @@ function rememberStatusDebug(message, requestId = '') {
     path: trace && trace.path ? trace.path : '',
     method: trace && trace.method ? trace.method : '',
     profileId: trace && trace.profileId ? trace.profileId : activeProfileId(),
+    resolvedHost: trace && trace.resolvedHost ? trace.resolvedHost : '',
+    resolvedProfileId: trace && trace.resolvedProfileId ? trace.resolvedProfileId : '',
     connectorBaseUrl: normalizeBaseUrl(els.connectorBaseUrl ? els.connectorBaseUrl.value : ''),
   };
   refreshStatusDebug();
@@ -484,6 +486,8 @@ function buildStatusDebugPayload() {
     method: state.lastDebugInfo.method || '',
     path: state.lastDebugInfo.path || '',
     profileId: state.lastDebugInfo.profileId || '',
+    resolvedHost: state.lastDebugInfo.resolvedHost || '',
+    resolvedProfileId: state.lastDebugInfo.resolvedProfileId || '',
     connectorBaseUrl: state.lastDebugInfo.connectorBaseUrl || '',
     uiMessage: state.lastDebugInfo.uiMessage || '',
   };
@@ -554,6 +558,17 @@ async function apiRequest(path, options = {}) {
     (payload && payload.requestId) ||
     response.headers.get('x-request-id') ||
     '';
+  const resolvedHost =
+    String(
+      response.headers.get('x-suitesidecar-resolved-host') ||
+      ''
+    ).trim();
+  const resolvedProfileId =
+    String(
+      response.headers.get('x-suitesidecar-resolved-profile') ||
+      (payload && payload.profileId) ||
+      ''
+    ).trim();
   state.lastApiTrace = {
     timestamp: new Date().toISOString(),
     method,
@@ -561,6 +576,8 @@ async function apiRequest(path, options = {}) {
     status: response.status,
     requestId,
     profileId: headerProfileId || activeProfileId(),
+    resolvedHost,
+    resolvedProfileId,
   };
 
   if (!response.ok) {
