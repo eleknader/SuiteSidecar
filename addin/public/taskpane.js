@@ -1713,12 +1713,17 @@ async function logEmail() {
       body: payload,
     });
     const rec = result.payload && result.payload.loggedRecord ? result.payload.loggedRecord : null;
+    const successMessageBase = `Email logged: ${rec ? rec.id : 'ok'}.`;
     const attachmentStatus = storeAttachments
       ? ` Attachments sent=${attachmentResult.attachments.length}, skipped=${attachmentResult.skippedCount}.`
       : contextAttachmentCount > 0
         ? ` Attachments detected=${contextAttachmentCount}, but storage is disabled.`
         : '';
-    setStatus('success', `Email logged: ${rec ? rec.id : 'ok'}.${attachmentStatus}`, result.requestId || '');
+
+    const lookupResult = await runLookup({ suppressStatus: true });
+    const lookupRefreshed = Boolean(lookupResult && lookupResult.payload && !lookupResult.payload.notFound);
+    const refreshSuffix = lookupRefreshed ? ' Lookup refreshed.' : '';
+    setStatus('success', `${successMessageBase}${attachmentStatus}${refreshSuffix}`, result.requestId || '');
   } catch (error) {
     if (error.status === 413) {
       const details =
