@@ -36,13 +36,17 @@
 - Improve lookup target selection for sent items by using recipient-first matching (fallback to sender).
 - Refresh lookup panels automatically after successful `Create Contact` / `Create Lead` so saved person context is visible without taskpane reload.
 
-## v0.5 - Host Compatibility and UX Reliability
+## v0.5 - Host Compatibility, Tenant Routing, and UX Reliability
 - Finalize supported Outlook host matrix and host-specific fallback behavior.
 - Stabilize auto-lookup and item-change handling across Outlook Desktop/Web hosts.
 - Add BCC-only recipient fallback to mailbox/account owner when visible recipients are unavailable.
 - Simplify single-site login UX: auto-use manifest host as connector URL, hide profile selector when only one profile exists, keep selector for multi-profile setups.
 - Improve user-facing status clarity for auth, lookup, and attachment outcomes.
 - Keep workflow compact while preserving operational transparency for support.
+- Add host/subdomain-to-profile routing so one connector can serve multiple tenants without profile dropdown selection.
+- Enforce server-side profile resolution from request host when a host mapping exists (ignore conflicting query/header `profileId`).
+- Add single-tenant login mode UX: hide profile selector and present exactly one login path when host resolves to one profile.
+- Add request diagnostics for tenant routing (`resolvedHost`, `resolvedProfileId`) in support/debug payload.
 
 ## v0.6 - Security Baseline (Enterprise Foundation)
 - Harden session/token lifecycle (expiry, cleanup, storage policy, invalidation path).
@@ -51,6 +55,10 @@
 - Add rate limiting on high-risk endpoints (`/auth/login`, `/email/log`, create endpoints).
 - Introduce structured audit events for login/logout/create/log/conflict/error flows.
 - Define key rotation procedure and incident-response minimum runbook.
+- Add `Create Opportunity from email` flow (API + add-in action) with minimal metadata payload and profile-scoped auth checks.
+- Add idempotency guard for opportunity creation keyed by message identifiers and target profile.
+- Add `Create Case from email` flow with the same profile-scoped contract and conflict/error behavior model.
+- Add support runbooks/tests for opportunity/case creation errors (`400/401/409/502`) and host-mapped profile behavior.
 
 ## v0.7 - Governance and Policy Controls
 - Deliver database-backed session/token state (production target), with migration and rollback runbooks from filesystem mode.
@@ -58,6 +66,9 @@
 - Add readiness checks beyond liveness (config/env/profile/runtime prerequisites).
 - Improve supportability with sanitized diagnostic bundle and incident hooks.
 - Strengthen admin/deployment documentation for controlled tenant rollout.
+- Add `Create Quote from email` as controlled rollout (feature-flagged per profile due to SuiteCRM variant complexity).
+- Define quote creation contract baseline (header fields first), with optional line-item enrichment as a later phase.
+- Add profile-level policy controls for enabling/disabling quote creation by tenant.
 
 ## v0.8 - Enterprise Identity and Access
 - Add optional enterprise SSO path (OIDC/SAML-compatible) with secure fallback login.
@@ -83,3 +94,4 @@
 ## Deferred Beyond v1.0
 - Rich HTML body persistence/rendering strategy with policy controls.
 - Optional per-profile logging backend strategy (`notes | emails`) if risk and compatibility are acceptable.
+- Full quote line-item/pricebook synchronization parity across SuiteCRM variants (beyond baseline create-quote flow).
