@@ -1,6 +1,6 @@
 {
   "name": "suitesidecar-addin",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "private": true,
   "description": "SuiteSidecar Outlook add-in vertical-slice scaffold",
   "scripts": {

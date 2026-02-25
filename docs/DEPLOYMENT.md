@@ -201,9 +201,9 @@ export SUITESIDECAR_TRUSTED_PROXY_IPS="127.0.0.1,10.0.0.10,10.0.0.0/24"
 Optional version metadata surfaced in `/version`:
 
 ```bash
-export APP_VERSION="0.4.2.0"
-export SUITESIDECAR_ADDIN_MANIFEST_VERSION="0.4.2.0"
-export SUITESIDECAR_ADDIN_ASSET_VERSION="0.4.2"
+export APP_VERSION="0.5.0.0"
+export SUITESIDECAR_ADDIN_MANIFEST_VERSION="0.5.0.0"
+export SUITESIDECAR_ADDIN_ASSET_VERSION="0.5.0"
 ```
 
 ## API smoke tests (normal DNS path)
