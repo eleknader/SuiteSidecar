@@ -5,6 +5,8 @@ info:
   description: >
     Connector API consumed by the SuiteSidecar Outlook add-in.
     This API mediates access to SuiteCRM and provides a stable, normalized contract.
+    When `SUITESIDECAR_ALLOWED_ORIGINS` is configured, requests with disallowed `Origin`
+    header are rejected with `403 forbidden`.
 servers:
   - url: https://connector.example.com
     description: Production
@@ -38,6 +40,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /version:
     get:
@@ -51,6 +55,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VersionResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /auth/login:
     post:
@@ -83,6 +89,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
@@ -97,6 +105,8 @@ paths:
           description: Logged out
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /profiles:
     get:
@@ -118,6 +128,8 @@ paths:
                 $ref: "#/components/schemas/ProfileListResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/ServerError"
 
@@ -152,6 +164,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
@@ -178,6 +192,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
         "429":
@@ -206,6 +222,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
         "429":
@@ -237,6 +255,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
         "413":
@@ -276,6 +296,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
@@ -322,6 +344,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
         "500":
@@ -342,6 +366,11 @@ components:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     Unauthorized:
       description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: Forbidden
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }

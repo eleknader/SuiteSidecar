@@ -10,6 +10,7 @@ use SuiteSidecar\Auth\SessionStore;
 use SuiteSidecar\EnvLoader;
 use SuiteSidecar\EmailLogController;
 use SuiteSidecar\EntitiesController;
+use SuiteSidecar\Http\CorsPolicy;
 use SuiteSidecar\Http\Router;
 use SuiteSidecar\Http\Response;
 use SuiteSidecar\LookupController;
@@ -42,19 +43,6 @@ if ($trustForwardedHost && $trustedProxyIpsRaw === '') {
     );
 }
 
-// Default JSON
-header('Content-Type: application/json');
-
-// Basic CORS (tighten later; MVP only)
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
-
 $readHeaders = static function (): array {
     if (function_exists('getallheaders')) {
         $headers = getallheaders();
@@ -79,6 +67,44 @@ $readHeaders = static function (): array {
     }
     return $headers;
 };
+
+$getHeaderValue = static function (array $headers, string $name): string {
+    foreach ($headers as $headerName => $value) {
+        if (strcasecmp((string) $headerName, $name) === 0) {
+            return is_array($value) ? trim((string) ($value[0] ?? '')) : trim((string) $value);
+        }
+    }
+
+    return '';
+};
+
+$requestHeaders = $readHeaders();
+$requestOrigin = $getHeaderValue($requestHeaders, 'Origin');
+
+$corsPolicy = CorsPolicy::fromEnvironment();
+$corsDecision = $corsPolicy->evaluate($requestOrigin);
+
+// Default JSON
+header('Content-Type: application/json');
+CorsPolicy::applySecurityHeaders();
+$corsPolicy->applyHeaders($corsDecision['allowOrigin']);
+
+if (!$corsDecision['allowed']) {
+    error_log(
+        '[requestId=' . Response::requestId() . '] Rejecting request due to disallowed Origin: origin='
+        . ($requestOrigin !== '' ? $requestOrigin : '-')
+        . ' reason='
+        . (string) ($corsDecision['reason'] ?? 'unknown')
+    );
+    Response::error('forbidden', 'Origin is not allowed', 403);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    header('X-Request-Id: ' . Response::requestId());
+    exit;
+}
 
 $jwtSecret = getenv('SUITESIDECAR_JWT_SECRET');
 $jwtConfigured = is_string($jwtSecret) && trim($jwtSecret) !== '';

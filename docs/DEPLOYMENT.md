@@ -131,6 +131,15 @@ Security hardening for host-based routing:
 - avoid overlapping host patterns across profiles (for example `*.example.com` and `*.sub.example.com`)
   - connector startup fails fast on ambiguous cross-profile host mappings
 
+Browser-origin hardening (CORS):
+
+- default behavior (when `SUITESIDECAR_ALLOWED_ORIGINS` is unset): `Access-Control-Allow-Origin: *`
+- recommended for production: set explicit allowlist with `SUITESIDECAR_ALLOWED_ORIGINS`
+- when allowlist is configured:
+  - requests with `Origin` header are accepted only from listed origins
+  - disallowed origins are rejected with `403 forbidden`
+  - `OPTIONS` preflight is also origin-validated
+
 ## OAuth troubleshooting (invalid_client / unauthorized)
 
 If SuiteCRM token calls fail with `invalid_client` or connector login returns unauthorized:
@@ -180,6 +189,9 @@ Optional host-routing security flags:
 # Optional explicit override for strict host routing.
 # By default strict mode auto-enables when any profile has hosts mappings.
 export SUITESIDECAR_REQUIRE_HOST_ROUTING="true"
+
+# Recommended in production: explicit browser-origin allowlist for API CORS
+export SUITESIDECAR_ALLOWED_ORIGINS="https://suitesidecar.example.com,https://suitesidecar.tapsa.duckdns.org"
 
 # Trust X-Forwarded-Host only behind controlled proxies
 export SUITESIDECAR_TRUST_X_FORWARDED_HOST="true"

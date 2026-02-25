@@ -28,3 +28,7 @@
   - forwarded host is ignored when the trusted proxy list is empty
 - Avoid overlapping profile host patterns that could route a host to multiple profiles.
   - startup rejects ambiguous cross-profile host mappings (exact-vs-exact, exact-vs-wildcard, wildcard-vs-wildcard overlap)
+- Restrict browser origins for API access in production:
+  - set `SUITESIDECAR_ALLOWED_ORIGINS=<comma-separated origins>`
+  - disallowed browser origins are rejected with `403 forbidden`
+  - leaving the variable unset keeps development-friendly wildcard CORS (`*`)
