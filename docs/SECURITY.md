@@ -18,7 +18,7 @@
 ## Tenant Routing Hardening
 
 - For multi-tenant host/subdomain routing, prefer strict mode:
-  - strict mode auto-enables when multiple profiles exist and host mappings are configured.
+  - strict mode auto-enables when host mappings are configured.
   - optional override: `SUITESIDECAR_REQUIRE_HOST_ROUTING=true|false`
   - when strict mode is active, unmapped request hosts are rejected.
 - Do not trust `X-Forwarded-Host` on direct/public connector traffic.

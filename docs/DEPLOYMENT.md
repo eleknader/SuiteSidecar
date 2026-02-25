@@ -114,12 +114,13 @@ Optional host/subdomain routing per profile:
   - `/profiles` returns only that profile
   - authenticated endpoints resolve profile from host mapping
   - conflicting `profileId` query/header/body values are ignored
-- if no host mapping matches, connector falls back to existing `profileId` behavior
+- if no host mapping matches:
+  - strict mode (default when `hosts` mappings are present) rejects the request
+  - fallback to explicit `profileId` works only when strict mode is explicitly disabled
 
 Security hardening for host-based routing:
 
 - strict host routing is auto-enabled by default when:
-  - multiple profiles are configured, and
   - at least one profile defines `hosts` mapping
 - optional override:
   - `SUITESIDECAR_REQUIRE_HOST_ROUTING=true` to force strict mode
@@ -177,7 +178,7 @@ Optional host-routing security flags:
 
 ```bash
 # Optional explicit override for strict host routing.
-# By default strict mode auto-enables for multi-profile configs that use hosts mappings.
+# By default strict mode auto-enables when any profile has hosts mappings.
 export SUITESIDECAR_REQUIRE_HOST_ROUTING="true"
 
 # Trust X-Forwarded-Host only behind controlled proxies

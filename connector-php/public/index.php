@@ -109,20 +109,20 @@ try {
     $profileResolver = new ProfileResolver($profileRegistry);
     $requireHostRoutingEnv = getenv('SUITESIDECAR_REQUIRE_HOST_ROUTING');
     $requireHostRoutingEnvSet = $requireHostRoutingEnv !== false && trim((string) $requireHostRoutingEnv) !== '';
-    $multiProfileWithHostMappings = $profileRegistry->count() > 1 && $profileRegistry->hasAnyHostMappings();
-    if ($multiProfileWithHostMappings && !$requireHostRoutingEnvSet) {
+    $hostMappingsConfigured = $profileRegistry->hasAnyHostMappings();
+    if ($hostMappingsConfigured && !$requireHostRoutingEnvSet) {
         error_log(
             '[requestId=' . Response::requestId() . '] Host-routing strict mode auto-enabled: '
-            . 'multi-profile configuration with host mappings detected'
+            . 'profile host mappings detected'
         );
     }
-    if ($multiProfileWithHostMappings && $requireHostRoutingEnvSet) {
+    if ($hostMappingsConfigured && $requireHostRoutingEnvSet) {
         $raw = strtolower(trim((string) $requireHostRoutingEnv));
         $enabled = in_array($raw, ['1', 'true', 'yes', 'on'], true);
         if (!$enabled) {
             error_log(
                 '[requestId=' . Response::requestId() . '] Startup warning: '
-                . 'SUITESIDECAR_REQUIRE_HOST_ROUTING is explicitly disabled in multi-profile host-routed deployment'
+                . 'SUITESIDECAR_REQUIRE_HOST_ROUTING is explicitly disabled while profile host mappings are configured'
             );
         }
     }

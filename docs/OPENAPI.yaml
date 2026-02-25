@@ -63,7 +63,7 @@ paths:
         If deployment host-to-profile routing is configured, the request Host resolves profile
         automatically and conflicting `profileId` input is ignored.
         Deployments may enforce strict host routing and reject unmapped hosts with `400 bad_request`
-        (this can be auto-enabled in multi-profile host-routed setups).
+        (this can be auto-enabled when host mappings are configured).
         The connector stores SuiteCRM tokens server-side.
       security: [] # public
       requestBody:
@@ -107,7 +107,7 @@ paths:
         can be restricted by deployment policy. When host-to-profile routing is configured and
         request Host matches exactly one profile mapping, response contains only that profile.
         Deployments may enforce strict host routing and reject unmapped hosts with `400 bad_request`
-        (this can be auto-enabled in multi-profile host-routed setups).
+        (this can be auto-enabled when host mappings are configured).
       security: [] # public (so login UI can list profiles)
       responses:
         "200":

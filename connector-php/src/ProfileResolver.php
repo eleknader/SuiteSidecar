@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SuiteSidecar;
 
 use SuiteSidecar\SuiteCrm\Profile;
+use SuiteSidecar\Http\Response;
 use InvalidArgumentException;
 
 final class ProfileResolver
@@ -21,7 +22,7 @@ final class ProfileResolver
             $requestedProfileId = $this->extractProfileId($query, $headers);
             if ($requestedProfileId !== null && $requestedProfileId !== $hostProfile->id) {
                 error_log(
-                    'Host-routed profile override applied: requestedProfileId='
+                    '[requestId=' . Response::requestId() . '] Host-routed profile override applied: requestedProfileId='
                     . $requestedProfileId
                     . ' resolvedProfileId='
                     . $hostProfile->id
@@ -30,7 +31,7 @@ final class ProfileResolver
             return $hostProfile;
         }
 
-        if ($this->isHostRoutingRequired() && $this->profileRegistry->count() > 1) {
+        if ($this->isHostRoutingRequired()) {
             throw new ProfileResolutionException('Request host is not mapped to a profile');
         }
 
@@ -57,7 +58,7 @@ final class ProfileResolver
 
     public function assertHostRoutingSatisfied(array $headers): void
     {
-        if (!$this->isHostRoutingRequired() || $this->profileRegistry->count() <= 1) {
+        if (!$this->isHostRoutingRequired()) {
             return;
         }
 
@@ -91,7 +92,7 @@ final class ProfileResolver
             return [$hostProfile];
         }
 
-        if ($this->isHostRoutingRequired() && $this->profileRegistry->count() > 1) {
+        if ($this->isHostRoutingRequired()) {
             throw new ProfileResolutionException('Request host is not mapped to a profile');
         }
 
@@ -147,13 +148,19 @@ final class ProfileResolver
 
         $trustedProxySources = $this->trustedProxySources();
         if ($trustedProxySources === []) {
-            error_log('Ignoring X-Forwarded-Host because SUITESIDECAR_TRUSTED_PROXY_IPS is empty');
+            error_log(
+                '[requestId=' . Response::requestId()
+                . '] Ignoring X-Forwarded-Host because SUITESIDECAR_TRUSTED_PROXY_IPS is empty'
+            );
             return false;
         }
 
         $remoteAddr = isset($_SERVER['REMOTE_ADDR']) ? trim((string) $_SERVER['REMOTE_ADDR']) : '';
         if ($remoteAddr === '') {
-            error_log('Ignoring X-Forwarded-Host because REMOTE_ADDR is missing');
+            error_log(
+                '[requestId=' . Response::requestId()
+                . '] Ignoring X-Forwarded-Host because REMOTE_ADDR is missing'
+            );
             return false;
         }
 
@@ -162,7 +169,8 @@ final class ProfileResolver
         }
 
         error_log(
-            'Ignoring X-Forwarded-Host from untrusted proxy source: remoteAddr='
+            '[requestId=' . Response::requestId()
+            . '] Ignoring X-Forwarded-Host from untrusted proxy source: remoteAddr='
             . $remoteAddr
         );
         return false;
@@ -200,7 +208,11 @@ final class ProfileResolver
                 continue;
             }
 
-            error_log('Ignoring invalid trusted proxy entry in SUITESIDECAR_TRUSTED_PROXY_IPS: ' . $source);
+            error_log(
+                '[requestId=' . Response::requestId()
+                . '] Ignoring invalid trusted proxy entry in SUITESIDECAR_TRUSTED_PROXY_IPS: '
+                . $source
+            );
         }
 
         return array_values(array_unique($sources));
@@ -292,9 +304,8 @@ final class ProfileResolver
             return $this->toBool((string) $envValue);
         }
 
-        // Auto-enable strict routing when host-based tenant routing is in use
-        // across multi-profile deployments.
-        return $this->profileRegistry->count() > 1 && $this->profileRegistry->hasAnyHostMappings();
+        // Auto-enable strict routing whenever host mappings are configured.
+        return $this->profileRegistry->hasAnyHostMappings();
     }
 
     private function toBool(string $raw): bool
