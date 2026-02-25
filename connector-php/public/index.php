@@ -31,6 +31,17 @@ use SuiteSidecar\TaskController;
 require_once __DIR__ . '/../vendor/autoload.php';
 EnvLoader::load(__DIR__ . '/../.env');
 
+$trustForwardedHostRaw = strtolower(trim((string) getenv('SUITESIDECAR_TRUST_X_FORWARDED_HOST')));
+$trustForwardedHost = in_array($trustForwardedHostRaw, ['1', 'true', 'yes', 'on'], true);
+$trustedProxyIpsRaw = trim((string) getenv('SUITESIDECAR_TRUSTED_PROXY_IPS'));
+if ($trustForwardedHost && $trustedProxyIpsRaw === '') {
+    error_log(
+        '[requestId=' . Response::requestId() . '] Startup warning: '
+        . 'SUITESIDECAR_TRUST_X_FORWARDED_HOST is enabled but SUITESIDECAR_TRUSTED_PROXY_IPS is empty. '
+        . 'X-Forwarded-Host will be ignored until trusted proxy IPs/CIDRs are configured.'
+    );
+}
+
 // Default JSON
 header('Content-Type: application/json');
 
@@ -96,12 +107,32 @@ try {
     }
 
     $profileResolver = new ProfileResolver($profileRegistry);
+    $requireHostRoutingEnv = getenv('SUITESIDECAR_REQUIRE_HOST_ROUTING');
+    $requireHostRoutingEnvSet = $requireHostRoutingEnv !== false && trim((string) $requireHostRoutingEnv) !== '';
+    $multiProfileWithHostMappings = $profileRegistry->count() > 1 && $profileRegistry->hasAnyHostMappings();
+    if ($multiProfileWithHostMappings && !$requireHostRoutingEnvSet) {
+        error_log(
+            '[requestId=' . Response::requestId() . '] Host-routing strict mode auto-enabled: '
+            . 'multi-profile configuration with host mappings detected'
+        );
+    }
+    if ($multiProfileWithHostMappings && $requireHostRoutingEnvSet) {
+        $raw = strtolower(trim((string) $requireHostRoutingEnv));
+        $enabled = in_array($raw, ['1', 'true', 'yes', 'on'], true);
+        if (!$enabled) {
+            error_log(
+                '[requestId=' . Response::requestId() . '] Startup warning: '
+                . 'SUITESIDECAR_REQUIRE_HOST_ROUTING is explicitly disabled in multi-profile host-routed deployment'
+            );
+        }
+    }
+
     $oauthTokenProvider = new OAuthTokenProvider();
     $sessionStore = new SessionStore();
     $emailActionLogStore = new EmailActionLogStore();
     $router = new Router();
     $systemController = new SystemController();
-    $profileController = new ProfileController($profileRegistry->all());
+    $profileController = new ProfileController($profileResolver);
     $buildAdapterForSession = static function (
         \SuiteSidecar\SuiteCrm\Profile $profile,
         array $session
@@ -125,10 +156,15 @@ try {
 
     $router->get('/health', [$systemController, 'health']);
     $router->get('/version', [$systemController, 'version']);
-    $router->get('/profiles', [$profileController, 'listProfiles']);
+    $router->get('/profiles', static function () use ($profileController, $readHeaders): void {
+        $headers = $readHeaders();
+        $profileController->listProfiles($headers);
+    });
     $router->post('/auth/login', static function () use (
         $buildJwtService,
         $profileRegistry,
+        $profileResolver,
+        $readHeaders,
         $oauthTokenProvider,
         $sessionStore
     ): void {
@@ -139,8 +175,17 @@ try {
         }
 
         try {
-            $authController = new AuthController($profileRegistry, $oauthTokenProvider, $jwtService, $sessionStore);
-            $authController->login();
+            $headers = $readHeaders();
+            $authController = new AuthController(
+                $profileRegistry,
+                $profileResolver,
+                $oauthTokenProvider,
+                $jwtService,
+                $sessionStore
+            );
+            $authController->login($headers);
+        } catch (ProfileResolutionException $e) {
+            Response::error('bad_request', $e->getMessage(), 400);
         } catch (AuthException $e) {
             error_log('[requestId=' . Response::requestId() . '] Login setup failed: ' . $e->getMessage());
             Response::error('server_error', 'Internal server error', 500);

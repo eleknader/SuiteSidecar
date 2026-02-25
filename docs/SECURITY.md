@@ -14,3 +14,17 @@
 - `connector-php/config/profiles.php` is local-only and ignored by git.
 - `connector-php/var/` is runtime-only and ignored by git (tokens/sessions must never be committed).
 - Keep operational machine-specific notes in `AGENTS.local.md` (ignored).
+
+## Tenant Routing Hardening
+
+- For multi-tenant host/subdomain routing, prefer strict mode:
+  - strict mode auto-enables when multiple profiles exist and host mappings are configured.
+  - optional override: `SUITESIDECAR_REQUIRE_HOST_ROUTING=true|false`
+  - when strict mode is active, unmapped request hosts are rejected.
+- Do not trust `X-Forwarded-Host` on direct/public connector traffic.
+  - Keep `SUITESIDECAR_TRUST_X_FORWARDED_HOST=false` unless connector is behind a controlled reverse proxy.
+- If `SUITESIDECAR_TRUST_X_FORWARDED_HOST=true`, restrict sources with:
+  - `SUITESIDECAR_TRUSTED_PROXY_IPS=<comma-separated proxy IPs/CIDRs>`
+  - forwarded host is ignored when the trusted proxy list is empty
+- Avoid overlapping profile host patterns that could route a host to multiple profiles.
+  - startup rejects ambiguous cross-profile host mappings (exact-vs-exact, exact-vs-wildcard, wildcard-vs-wildcard overlap)

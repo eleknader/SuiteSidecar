@@ -17,6 +17,8 @@ final class Profile
         public readonly string $oauthClientId,
         public readonly string $oauthClientSecret,
         public readonly string $oauthGrantType,
+        /** @var array<string> */
+        public readonly array $hosts = [],
         public readonly ?string $notes = null,
     ) {
     }
@@ -60,6 +62,7 @@ final class Profile
 
         $apiFlavor = (string) $profile['apiFlavor'];
         $notes = isset($profile['notes']) ? (string) $profile['notes'] : null;
+        $hosts = self::normalizeHosts($profile['hosts'] ?? []);
 
         $oauth = [];
         if (isset($profile['oauth'])) {
@@ -98,8 +101,155 @@ final class Profile
             oauthClientId: $clientId,
             oauthClientSecret: $clientSecret,
             oauthGrantType: $grantType,
+            hosts: $hosts,
             notes: $notes,
         );
+    }
+
+    private static function normalizeHosts(mixed $rawHosts): array
+    {
+        if ($rawHosts === null || $rawHosts === []) {
+            return [];
+        }
+
+        if (!is_array($rawHosts)) {
+            throw new InvalidArgumentException('Invalid hosts config in profile; expected array');
+        }
+
+        $normalizedHosts = [];
+        foreach ($rawHosts as $value) {
+            $host = self::normalizeHostPattern((string) $value);
+            if ($host !== '') {
+                $normalizedHosts[] = $host;
+            }
+        }
+
+        return array_values(array_unique($normalizedHosts));
+    }
+
+    private static function normalizeHostPattern(string $value): string
+    {
+        $candidate = strtolower(trim($value));
+        if ($candidate === '') {
+            return '';
+        }
+
+        $wildcardPrefix = '';
+        if (str_starts_with($candidate, '*.')) {
+            $wildcardPrefix = '*.';
+            $candidate = substr($candidate, 2);
+        }
+
+        $candidate = preg_replace('/:\d+$/', '', $candidate);
+        $candidate = rtrim((string) $candidate, '.');
+
+        if ($candidate === '') {
+            throw new InvalidArgumentException('Invalid host pattern in profile hosts list');
+        }
+
+        if (!self::isValidHostValue($candidate)) {
+            throw new InvalidArgumentException('Invalid host pattern in profile hosts list');
+        }
+
+        if (
+            $wildcardPrefix !== ''
+            && (
+                str_contains($candidate, '.') === false
+                || self::isIpAddress($candidate)
+                || $candidate === 'localhost'
+            )
+        ) {
+            throw new InvalidArgumentException('Wildcard host pattern must target a domain suffix');
+        }
+
+        return $wildcardPrefix . $candidate;
+    }
+
+    public function matchesHost(string $requestHost): bool
+    {
+        if ($this->hosts === []) {
+            return false;
+        }
+
+        $host = self::normalizeHostForMatch($requestHost);
+        if ($host === '') {
+            return false;
+        }
+
+        foreach ($this->hosts as $pattern) {
+            if (str_starts_with($pattern, '*.')) {
+                $suffix = substr($pattern, 1);
+                $apex = substr($pattern, 2);
+                if ($apex !== '' && $host !== $apex && str_ends_with($host, (string) $suffix)) {
+                    return true;
+                }
+                continue;
+            }
+
+            if ($host === $pattern) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function normalizeHostForMatch(string $value): string
+    {
+        $host = strtolower(trim($value));
+        if ($host === '') {
+            return '';
+        }
+
+        if (str_contains($host, ',')) {
+            $parts = explode(',', $host);
+            $host = trim((string) ($parts[0] ?? ''));
+        }
+
+        if (str_starts_with($host, '[') && str_contains($host, ']')) {
+            $end = strpos($host, ']');
+            if ($end !== false) {
+                $host = substr($host, 1, $end - 1);
+            }
+        } else {
+            $host = preg_replace('/:\d+$/', '', $host);
+        }
+
+        $host = rtrim((string) $host, '.');
+        if ($host === '' || !self::isValidHostValue($host)) {
+            return '';
+        }
+
+        return $host;
+    }
+
+    private static function isValidHostValue(string $host): bool
+    {
+        if ($host === 'localhost') {
+            return true;
+        }
+
+        if (self::isIpAddress($host)) {
+            return true;
+        }
+
+        if (strlen($host) > 253) {
+            return false;
+        }
+
+        $labels = explode('.', $host);
+        foreach ($labels as $label) {
+            if (!preg_match('/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/', $label)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function isIpAddress(string $value): bool
+    {
+        return filter_var($value, FILTER_VALIDATE_IP) !== false;
     }
 
     public static function normalizeProfileIdForEnv(string $profileId): string

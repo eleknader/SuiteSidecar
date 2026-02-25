@@ -60,6 +60,10 @@ paths:
         Authenticates the user against a SuiteCRM instance/profile and returns a connector-issued
         bearer token. If connector has multiple configured profiles, `profileId` is required.
         If connector has exactly one profile, `profileId` may be omitted and is resolved server-side.
+        If deployment host-to-profile routing is configured, the request Host resolves profile
+        automatically and conflicting `profileId` input is ignored.
+        Deployments may enforce strict host routing and reject unmapped hosts with `400 bad_request`
+        (this can be auto-enabled in multi-profile host-routed setups).
         The connector stores SuiteCRM tokens server-side.
       security: [] # public
       requestBody:
@@ -100,7 +104,10 @@ paths:
       summary: List available SuiteCRM profiles
       description: >
         Returns configured profiles (instances). Profiles are connector-side configuration and
-        can be restricted by deployment policy.
+        can be restricted by deployment policy. When host-to-profile routing is configured and
+        request Host matches exactly one profile mapping, response contains only that profile.
+        Deployments may enforce strict host routing and reject unmapped hosts with `400 bad_request`
+        (this can be auto-enabled in multi-profile host-routed setups).
       security: [] # public (so login UI can list profiles)
       responses:
         "200":
@@ -109,6 +116,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProfileListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "500":
           $ref: "#/components/responses/ServerError"
 
@@ -440,6 +449,7 @@ components:
           description: >
             Connector profile id for the target SuiteCRM instance.
             Required when connector has multiple profiles; optional when exactly one profile exists.
+            May be omitted when request Host is mapped to a profile; conflicting values are ignored.
           example: "prod-eu-1"
         username:
           type: string

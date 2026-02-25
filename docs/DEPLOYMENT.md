@@ -107,6 +107,29 @@ Profile URL rule for SuiteCRM v8:
 - `tokenUrl` should be `https://<host>/legacy/Api/access_token`
 - do not set `suitecrmBaseUrl` to `/legacy`
 
+Optional host/subdomain routing per profile:
+
+- add `hosts` array in each profile config entry (exact host or wildcard `*.example.com`)
+- when request `Host` matches exactly one profile mapping:
+  - `/profiles` returns only that profile
+  - authenticated endpoints resolve profile from host mapping
+  - conflicting `profileId` query/header/body values are ignored
+- if no host mapping matches, connector falls back to existing `profileId` behavior
+
+Security hardening for host-based routing:
+
+- strict host routing is auto-enabled by default when:
+  - multiple profiles are configured, and
+  - at least one profile defines `hosts` mapping
+- optional override:
+  - `SUITESIDECAR_REQUIRE_HOST_ROUTING=true` to force strict mode
+  - `SUITESIDECAR_REQUIRE_HOST_ROUTING=false` to explicitly disable strict mode
+- keep `SUITESIDECAR_TRUST_X_FORWARDED_HOST=false` unless connector is behind a trusted reverse proxy
+- if forwarded host trust is enabled, set `SUITESIDECAR_TRUSTED_PROXY_IPS` (comma-separated source IPs or CIDRs)
+- if `SUITESIDECAR_TRUSTED_PROXY_IPS` is empty, forwarded host is ignored even when trust flag is enabled
+- avoid overlapping host patterns across profiles (for example `*.example.com` and `*.sub.example.com`)
+  - connector startup fails fast on ambiguous cross-profile host mappings
+
 ## OAuth troubleshooting (invalid_client / unauthorized)
 
 If SuiteCRM token calls fail with `invalid_client` or connector login returns unauthorized:
@@ -150,6 +173,18 @@ Optional token lifetime override (default: 8h):
 export SUITESIDECAR_JWT_TTL_SECONDS="28800"
 ```
 
+Optional host-routing security flags:
+
+```bash
+# Optional explicit override for strict host routing.
+# By default strict mode auto-enables for multi-profile configs that use hosts mappings.
+export SUITESIDECAR_REQUIRE_HOST_ROUTING="true"
+
+# Trust X-Forwarded-Host only behind controlled proxies
+export SUITESIDECAR_TRUST_X_FORWARDED_HOST="true"
+export SUITESIDECAR_TRUSTED_PROXY_IPS="127.0.0.1,10.0.0.10,10.0.0.0/24"
+```
+
 Optional version metadata surfaced in `/version`:
 
 ```bash
@@ -175,6 +210,14 @@ LOGIN_RESPONSE=$(curl -sS -X POST "${BASE_URL}/auth/login" \
   }')
 
 TOKEN=$(printf "%s" "${LOGIN_RESPONSE}" | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["token"] ?? "";')
+
+# If host routing is configured for BASE_URL host, profileId can be omitted:
+LOGIN_RESPONSE_HOST_ROUTED=$(curl -sS -X POST "${BASE_URL}/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username":"user@example.com",
+    "password":"your-password"
+  }')
 
 curl -sS "${BASE_URL}/lookup/by-email?profileId=example-dev&email=known.user@example.com&include=account" \
   -H "Authorization: Bearer ${TOKEN}"

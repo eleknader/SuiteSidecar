@@ -6,6 +6,8 @@ namespace SuiteSidecar\Auth;
 
 use SuiteSidecar\Http\Response;
 use SuiteSidecar\ProfileRegistry;
+use SuiteSidecar\ProfileResolver;
+use SuiteSidecar\ProfileResolutionException;
 use SuiteSidecar\SuiteCrm\OAuthTokenProvider;
 use SuiteSidecar\SuiteCrm\SuiteCrmAuthException;
 
@@ -13,14 +15,22 @@ final class AuthController
 {
     public function __construct(
         private readonly ProfileRegistry $profileRegistry,
+        private readonly ProfileResolver $profileResolver,
         private readonly OAuthTokenProvider $oauthTokenProvider,
         private readonly JwtService $jwtService,
         private readonly SessionStore $sessionStore,
     ) {
     }
 
-    public function login(): void
+    public function login(array $headers = []): void
     {
+        try {
+            $this->profileResolver->assertHostRoutingSatisfied($headers);
+        } catch (ProfileResolutionException $e) {
+            Response::error('bad_request', $e->getMessage(), 400);
+            return;
+        }
+
         $payload = $this->readJsonBody();
         if ($payload === null) {
             Response::error('bad_request', 'Invalid JSON body', 400);
@@ -36,7 +46,17 @@ final class AuthController
             return;
         }
 
-        if ($profileId === '') {
+        $hostProfile = $this->profileResolver->resolveHostProfile($headers);
+        if ($hostProfile !== null) {
+            if ($profileId !== '' && $profileId !== $hostProfile->id) {
+                error_log(
+                    '[requestId=' . Response::requestId() . '] Host-routed login override applied:'
+                    . ' requestedProfileId=' . $profileId
+                    . ' resolvedProfileId=' . $hostProfile->id
+                );
+            }
+            $profile = $hostProfile;
+        } elseif ($profileId === '') {
             if ($this->profileRegistry->count() === 1) {
                 $profiles = $this->profileRegistry->all();
                 $profile = $profiles[0];
