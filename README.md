@@ -240,6 +240,21 @@ Assign users/groups, then wait for propagation.
 - Security notes: `docs/SECURITY.md`
 - Add-in packaging and sideload details: `addin/README.md`
 
+## Release Artifacts (v0.5)
+
+Build release artifacts from repo root:
+
+```bash
+bash ops/scripts/package-addin.sh
+bash ops/scripts/package-release.sh
+```
+
+Expected outputs for Git release attachments:
+
+- `dist/release/suitesidecar-release.zip` (or `.tar.gz`)
+- `dist/addin/suitesidecar-manifest.zip` (or `.tar.gz`)
+- `dist/addin/suitesidecar-static.zip` (or `.tar.gz`)
+
 ## Repository Layout
 
 - `connector-php/` connector backend

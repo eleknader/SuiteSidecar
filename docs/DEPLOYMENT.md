@@ -440,7 +440,15 @@ If successful, artifacts are created under `dist/addin/`:
 
 The script fails if the manifest still contains placeholder URLs.
 `publish-addin.sh` also deploys files into `connector-php/public/addin/`.
-`package-release.sh` creates a combined package under `dist/release/`.
+`package-release.sh` creates a combined package under `dist/release/`:
+
+- `dist/release/suitesidecar-release.zip` (or `.tar.gz`)
+
+Recommended Git release assets for v0.5 publishing:
+
+- `dist/release/suitesidecar-release.zip` (or `.tar.gz`)
+- `dist/addin/suitesidecar-manifest.zip` (or `.tar.gz`)
+- `dist/addin/suitesidecar-static.zip` (or `.tar.gz`)
 
 ## Supported Outlook Host Matrix (v0.5)
 
